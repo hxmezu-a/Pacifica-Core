@@ -1,0 +1,39 @@
+name: Pacifica-Core
+version: ${version}
+main: com.districtx.pacificacore.PacificaCore
+api-version: '1.20'
+author: DistrictX Developers Officials
+depend:
+  - Vault
+commands:
+  diamond:
+    description: Show your Diamond Currency balance
+    aliases: [dias, diamonds, dc]
+    permission: pacifica.core.command.diamond
+  bal:
+    description: Show a server balance
+    aliases: [balance]
+    permission: pacifica.core.command.balance
+  core:
+    description: Manage Pacifica-Core currency
+    aliases: [dmdadmin]
+    permission: pacifica.core.admin.reload
+permissions:
+  pacifica.core.command.diamond:
+    default: true
+  pacifica.core.command.balance:
+    default: true
+  pacifica.core.command.balance.others:
+    default: op
+  pacifica.core.admin.reload:
+    default: op
+  pacifica.core.admin.dgive:
+    default: op
+  pacifica.core.admin.bgive:
+    default: op
+  pacifica.core.admin.reset:
+    default: op
+  pacifica.core.admin.get:
+    default: op
+  pacifica.core.admin.set:
+    default: op

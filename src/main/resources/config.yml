@@ -1,0 +1,17 @@
+storage-file: balance.db
+messages:
+  prefix: '&8[&bPacifica-Core&8] &r'
+  no-permission: '&cYou do not have permission.'
+  players-only: '&cOnly players can use this command.'
+  invalid-amount: '&cEnter a valid non-negative amount.'
+  invalid-currency: '&cCurrency must be diamond or balance.'
+  player-not-found: '&cPlayer not found.'
+  balance-diamond: '&bDiamond&7: &b%amount%'
+  balance-money: '&7Balance: &a$%amount%'
+  balance-other: '&7Balance of &e%player%&7: &a$%amount%'
+  reloaded: '&aPacifica-Core configuration reloaded.'
+  updated: '&aUpdated %player%''s %currency% balance by %amount%.'
+  reset: '&aReset %player%''s %currency% balance.'
+  set: '&aSet %player%''s %currency% balance to %amount%.'
+  removed: '&aRemoved %amount% %currency% from %player%.'
+  usage: '&e/core reload|dgive|bgive|reset|get|set ...'
