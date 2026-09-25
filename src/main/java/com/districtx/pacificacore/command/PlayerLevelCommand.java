@@ -44,8 +44,8 @@ public final class PlayerLevelCommand implements CommandExecutor, TabCompleter {
         if (!sender.hasPermission("pacifica.level.command")) return send(sender, "no-permission", Map.of());
         if (!(sender instanceof Player player)) return send(sender, "players-only", Map.of());
         if (args.length != 0) return send(sender, "usage", Map.of());
-        PlayerLevelService levels = plugin.getAPI().getPlayerLevelService();
-        return sendTemplate(sender, "self", levelValues(levels, player.getUniqueId(), null));
+        plugin.getAPI().getLevelMenuService().openMainMenu(player);
+        return true;
     }
 
     private boolean admin(CommandSender sender, String[] args) {
@@ -122,7 +122,7 @@ public final class PlayerLevelCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean sendTemplate(CommandSender sender, String key, Map<String, String> values) {
-        String message = plugin.getConfig().getString("player-level.messages.commands." + key, "");
+        String message = plugin.getLevelConfig().getString("leveling.messages.commands." + key, "");
         return sendMessage(sender, message, values);
     }
 
@@ -131,7 +131,7 @@ public final class PlayerLevelCommand implements CommandExecutor, TabCompleter {
         if (key.equals("no-permission") || key.equals("players-only") || key.equals("player-not-found")) {
             return sendMessage(sender, message, values);
         }
-        message = plugin.getConfig().getString("player-level.messages.commands." + key, message);
+        message = plugin.getLevelConfig().getString("leveling.messages.commands." + key, message);
         return sendMessage(sender, message, values);
     }
 

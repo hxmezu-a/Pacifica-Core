@@ -5,6 +5,11 @@ import com.districtx.pacificacore.api.EconomyService;
 import com.districtx.pacificacore.api.PacificaCoreAPI;
 import com.districtx.pacificacore.api.PacificaCoreAPIImpl;
 import com.districtx.pacificacore.api.PlayerLevelService;
+import com.districtx.pacificacore.api.LevelRewardService;
+import com.districtx.pacificacore.api.DailyExperienceService;
+import com.districtx.pacificacore.api.PrestigeService;
+import com.districtx.pacificacore.api.RankExperienceBonusService;
+import com.districtx.pacificacore.api.LevelMenuService;
 import com.districtx.pacificacore.api.TransactionService;
 import com.districtx.pacificacore.command.PlayerLevelCommand;
 import com.districtx.pacificacore.economy.DiamondCurrencyServiceImpl;
@@ -13,6 +18,14 @@ import com.districtx.pacificacore.economy.TransactionServiceImpl;
 import com.districtx.pacificacore.storage.CurrencyStorage;
 import com.districtx.pacificacore.storage.DatabaseManager;
 import com.districtx.pacificacore.storage.PlayerLevelManager;
+import com.districtx.pacificacore.storage.DailyExperienceRepository;
+import com.districtx.pacificacore.storage.PrestigeRepository;
+import com.districtx.pacificacore.level.reward.LevelRewardManager;
+import com.districtx.pacificacore.level.DailyExperienceManager;
+import com.districtx.pacificacore.level.PrestigeManager;
+import com.districtx.pacificacore.level.gui.LevelMenuManager;
+import com.districtx.pacificacore.integration.LuckPermsRankProvider;
+import com.districtx.pacificacore.integration.RankExperienceBonusManager;
 import com.districtx.pacificacore.integration.LootSystemIntegration;
 import com.districtx.pacificacore.integration.PacificaCombatTagIntegration;
 import com.districtx.pacificacore.level.PlayerLevelListener;
@@ -50,8 +63,15 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
     private DatabaseManager database;
     private CurrencyStorage storage;
     private FileConfigurationBridge messages;
+    private FileConfiguration levelConfig;
+    private FileConfiguration levelRewardsConfig;
     private BlackMarketManager blackMarket;
     private PlayerLevelManager playerLevels;
+    private LevelRewardManager levelRewards;
+    private DailyExperienceManager dailyExperience;
+    private PrestigeManager prestige;
+    private RankExperienceBonusManager rankBonuses;
+    private LevelMenuManager levelMenus;
     private LootSystemIntegration lootSystemIntegration;
     private Object playerLevelPlaceholderExpansion;
 
@@ -62,6 +82,9 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
+        saveResourceIfMissing("level.yml");
+        saveResourceIfMissing("level-rewards.yml");
+        reloadLevelConfigurations();
         messages = new FileConfigurationBridge(this);
         database = new DatabaseManager(this);
         try {
@@ -78,9 +101,26 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
         DiamondCurrencyService diamonds = new DiamondCurrencyServiceImpl(storage);
         EconomyService economy = new EconomyServiceImpl(storage);
         TransactionService transactions = new TransactionServiceImpl(storage);
-        api = new PacificaCoreAPIImpl(diamonds, economy, transactions, playerLevels);
+        levelRewards = new LevelRewardManager(this, database, playerLevels, economy, diamonds);
+        playerLevels.setRewardService(levelRewards);
+        rankBonuses = new RankExperienceBonusManager(this, new LuckPermsRankProvider(this));
+        playerLevels.setRankExperienceBonusService(rankBonuses);
+        dailyExperience = new DailyExperienceManager(this, playerLevels, economy,
+                new DailyExperienceRepository(this, database));
+        prestige = new PrestigeManager(this, playerLevels, new PrestigeRepository(this, database));
+        levelMenus = new LevelMenuManager(this, playerLevels, levelRewards, dailyExperience, prestige, rankBonuses);
+        playerLevels.setLevelMenuService(levelMenus);
+        api = new PacificaCoreAPIImpl(diamonds, economy, transactions, playerLevels, levelRewards,
+                dailyExperience, prestige, rankBonuses, levelMenus);
         blackMarket = new BlackMarketManager(this, database, economy);
         getServer().getPluginManager().registerEvents(blackMarket, this);
+        getServer().getPluginManager().registerEvents(levelMenus, this);
+        getServer().getPluginManager().registerEvents(levelMenus.getPrestigeMenu(), this);
+        getServer().getServicesManager().register(LevelRewardService.class, levelRewards, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(DailyExperienceService.class, dailyExperience, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(PrestigeService.class, prestige, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(RankExperienceBonusService.class, rankBonuses, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(LevelMenuService.class, levelMenus, this, ServicePriority.Normal);
         getServer().getServicesManager().register(DiamondCurrencyService.class, diamonds, this, ServicePriority.Normal);
         getServer().getServicesManager().register(EconomyService.class, economy, this, ServicePriority.Normal);
         getServer().getServicesManager().register(TransactionService.class, transactions, this, ServicePriority.Normal);
@@ -103,7 +143,11 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
         blackMarket.cleanupExpiredOffers();
         PacificaCombatTagIntegration combatTagIntegration = new PacificaCombatTagIntegration(this);
         getServer().getPluginManager().registerEvents(new PlayerLevelListener(this, playerLevels, combatTagIntegration), this);
-        for (Player online : Bukkit.getOnlinePlayers()) playerLevels.initializePlayer(online.getUniqueId());
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            playerLevels.initializePlayer(online.getUniqueId());
+            playerLevels.refreshPlayer(online);
+            playerLevels.processPendingLevelRewards(online);
+        }
         lootSystemIntegration = new LootSystemIntegration(this);
         lootSystemIntegration.refresh();
         refreshPlayerLevelPlaceholderExpansion();
@@ -333,14 +377,39 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
     }
 
     private void reloadPlayerLevelConfiguration() {
+        reloadLevelConfigurations();
         if (playerLevels != null) playerLevels.reload();
         if (lootSystemIntegration != null) lootSystemIntegration.refresh();
         refreshPlayerLevelPlaceholderExpansion();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (playerLevels != null) playerLevels.processPendingLevelRewards(player);
+            if (levelMenus != null) levelMenus.refresh(player);
+        }
+    }
+
+    public FileConfiguration getLevelConfig() {
+        return levelConfig;
+    }
+
+    public FileConfiguration getLevelRewardsConfig() {
+        return levelRewardsConfig;
+    }
+
+    private void reloadLevelConfigurations() {
+        File levelFile = new File(getDataFolder(), "level.yml");
+        File rewardsFile = new File(getDataFolder(), "level-rewards.yml");
+        levelConfig = YamlConfiguration.loadConfiguration(levelFile);
+        levelRewardsConfig = YamlConfiguration.loadConfiguration(rewardsFile);
+    }
+
+    private void saveResourceIfMissing(String resource) {
+        File file = new File(getDataFolder(), resource);
+        if (!file.exists()) saveResource(resource, false);
     }
 
     private void refreshPlayerLevelPlaceholderExpansion() {
         unregisterPlayerLevelPlaceholderExpansion();
-        if (!getConfig().getBoolean("player-level.integrations.placeholder-api", true)) return;
+        if (!getLevelConfig().getBoolean("leveling.integrations.placeholder-api", true)) return;
         org.bukkit.plugin.Plugin placeholderApi = getServer().getPluginManager().getPlugin("PlaceholderAPI");
         if (placeholderApi == null || !placeholderApi.isEnabled()) return;
         try {

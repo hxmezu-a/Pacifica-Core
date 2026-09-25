@@ -39,18 +39,18 @@ public final class PlayerLevelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerDeath(PlayerDeathEvent event) {
-        if (!plugin.getConfig().getBoolean("player-level.enabled", true)) return;
+        if (!plugin.getLevelConfig().getBoolean("leveling.enabled", true)) return;
         Player victim = event.getEntity();
         UUID victimId = victim.getUniqueId();
         if (!rewardedDeaths.add(victimId)) return;
         boolean taggedAtDeath = combatTag.isInCombat(victim);
         Player killer = victim.getKiller();
         if (killer != null && !killer.getUniqueId().equals(victimId)) {
-            double reward = plugin.getConfig().getDouble("player-level.experience.player-kill", 3.0);
+            double reward = plugin.getLevelConfig().getDouble("leveling.xp-sources.player-kill", 3.0);
             playerLevels.addExperience(killer.getUniqueId(), reward, ExperienceSource.PLAYER_KILL);
         }
         if (taggedAtDeath) {
-            double reward = plugin.getConfig().getDouble("player-level.experience.pvp-death", 1.0);
+            double reward = plugin.getLevelConfig().getDouble("leveling.xp-sources.pvp-death", 1.0);
             playerLevels.addExperience(victimId, reward, ExperienceSource.PVP_DEATH);
         }
     }
@@ -60,6 +60,8 @@ public final class PlayerLevelListener implements Listener {
         UUID playerId = event.getPlayer().getUniqueId();
         rewardedDeaths.remove(playerId);
         playerLevels.initializePlayer(playerId);
+        playerLevels.refreshPlayer(event.getPlayer());
+        playerLevels.processPendingLevelRewards(event.getPlayer());
     }
 
     @EventHandler

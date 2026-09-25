@@ -34,9 +34,24 @@ public interface PlayerLevelService {
      * Gets the cumulative experience threshold for a level.
      *
      * @param level requested level
-     * @return cumulative threshold for the clamped level
+     * @return cumulative threshold for the requested level
      */
     double getExperienceRequiredForLevel(int level);
+
+    /** Gets the XP cost of progressing from a level to its next level. */
+    default double getExperienceRequiredForNextLevel(int level) {
+        return getProgression().getExperienceRequiredForNextLevel(level);
+    }
+
+    /** Gets the cumulative XP threshold required to reach a level. */
+    default double getTotalExperienceRequiredForLevel(int level) {
+        return getProgression().getTotalExperienceRequiredForLevel(level);
+    }
+
+    /** Gets XP earned since the current level began. */
+    default double getExperienceIntoCurrentLevel(UUID playerId) {
+        return getProgression().getExperienceIntoCurrentLevel(getExperience(playerId));
+    }
 
     /**
      * Gets progress to the next level as a fraction from zero to one.
@@ -46,11 +61,19 @@ public interface PlayerLevelService {
      */
     double getProgressToNextLevel(UUID playerId);
 
+    /** Gets progress to the next level as a fraction from zero to one. */
+    default double getProgress(UUID playerId) {
+        return getProgressToNextLevel(playerId);
+    }
+
     /** @return configured minimum level */
     int getMinimumLevel();
 
     /** @return configured maximum level */
     int getMaximumLevel();
+
+    /** Gets the authoritative progression calculator used by this service. */
+    LevelProgression getProgression();
 
     /**
      * Adds experience using the API source.

@@ -1,0 +1,277 @@
+leveling:
+  enabled: true
+  infinite-levels: true
+  minimum-level: 1
+  progression:
+    base-xp: 100.0
+    growth-rate: 1.25
+  xp-sources:
+    player-kill: 3.0
+    pvp-death: 1.0
+    loot: 1.5
+  integrations:
+    loot-system: true
+    placeholder-api: true
+  messages:
+    experience:
+      enabled: true
+      chat: true
+      action-bar: false
+      sound:
+        enabled: false
+        sound: ENTITY_PLAYER_LEVELUP
+        volume: 1.0
+        pitch: 1.0
+      player-kill: '&8[&6&lLEVEL&8] &a+%amount% XP &7for killing a player!'
+      pvp-death: '&8[&6&lLEVEL&8] &a+%amount% XP &7from PvP combat!'
+      loot: '&8[&6&lLEVEL&8] &a+%amount% XP &7from loot!'
+      generic: '&8[&6&lLEVEL&8] &a+%amount% XP'
+      daily-xp: '&8[&6&lLEVEL&8] &a+%amount% XP from Daily XP!'
+    level-up:
+      enabled: true
+      message: '&6&lLEVEL UP! &7You reached &eLevel %new_level%&7!'
+    commands:
+      updated: '&aUpdated %player%''s Pacifica level data.'
+      invalid-level: '&cEnter a valid positive level within the numeric range.'
+      invalid-experience: '&cEnter a valid non-negative experience amount.'
+      level-up: '&aSet %player%''s Pacifica level to %level%.'
+      added: '&aAdded %amount% Pacifica XP to %player%.'
+      set-experience: '&aSet %player%''s Pacifica XP to %amount%.'
+      removed: '&aRemoved %amount% Pacifica XP from %player%.'
+      usage: '&e/leveladmin set <player> <level>|addxp <player> <amount>|setxp <player> <amount>|removexp <player> <amount>|info <player>'
+      self: |-
+        &6&lPlayer Level
+        &7Level: &e%level%
+        &7Experience: &a%exp%
+        &7Progress: &b%progress%%
+        &7XP to next level: &f%exp_to_next_level%
+      info: |-
+        &6&lPlayer Level &7— &e%player%
+        &7Level: &e%level%
+        &7Experience: &a%exp%
+        &7Progress: &b%progress%%
+        &7XP to next level: &f%exp_to_next_level%
+  debug:
+    xp: false
+daily-xp:
+  enabled: true
+  unlock-level: 10
+  base-xp: 100.0
+  base-price: 2500.0
+  xp-increase-per-10-levels: 0.20
+  price-increase-per-10-levels: 0.50
+  cooldown: 24h
+  apply-rank-bonus: false
+  cooldown-format:
+    days: '%days%d %hours%h'
+    hours: '%hours%h %minutes%m'
+    minutes: '%minutes%m'
+prestige:
+  enabled: true
+  unlock-level: 100
+  mechanics-enabled: false
+rank-bonuses:
+  enabled: true
+  mode: PERCENTAGE
+  default:
+    kill: 0.0
+    death: 0.0
+    loot: 0.0
+    daily-xp: 0.0
+    other: 0.0
+  ranks:
+    member:
+      kill: 0.0
+      death: 0.0
+      loot: 0.0
+    vip:
+      kill: 10.0
+      death: 10.0
+      loot: 10.0
+    premium:
+      kill: 25.0
+      death: 25.0
+      loot: 25.0
+level-colors:
+  - min-level: 1
+    max-level: 20
+    color: '&2&l'
+  - min-level: 21
+    max-level: 40
+    color: '&a&l'
+  - min-level: 41
+    max-level: 60
+    color: '&e&l'
+  - min-level: 61
+    max-level: 80
+    color: '&6&l'
+  - min-level: 81
+    max-level: 100
+    color: '&c&l'
+placeholders:
+  infinite-level-max: '∞'
+currency:
+  money-symbol: '$'
+  diamond-name: Diamonds
+gui:
+  main:
+    title: '&6&lLeveling Menu'
+    rows: 6
+    border:
+      white:
+        slots: [0, 9, 18, 27, 36, 45, 8, 17, 26, 35, 44, 53]
+        material: WHITE_STAINED_GLASS_PANE
+        name: '&7'
+      black:
+        slots: [1, 2, 3, 4, 5, 6, 7, 10, 19, 28, 37, 46, 16, 25, 34, 43, 52]
+        material: BLACK_STAINED_GLASS_PANE
+        name: '&7'
+  progression:
+    title: '&6&lLevel Progression &7- &e%page%/5'
+    rows: 6
+    pages: 5
+    levels-per-page: 20
+    border:
+      white:
+        slots: [0, 9, 18, 27, 36, 45, 8, 17, 26, 35, 44, 53]
+        material: WHITE_STAINED_GLASS_PANE
+        name: '&7'
+      black:
+        slots: [1, 2, 3, 4, 5, 6, 7, 10, 19, 28, 37, 46, 16, 25, 34, 43, 52]
+        material: BLACK_STAINED_GLASS_PANE
+        name: '&7'
+    back:
+      slot: 47
+      material: REDSTONE
+      name: '&c&lBack'
+      lore:
+        - '&7Return to the Leveling Menu page!'
+    navigation:
+      previous-slot: 48
+      next-slot: 51
+      material: ARROW
+      previous-name: '&e&lPrevious Page'
+      next-name: '&e&lNext Page'
+      previous-lore:
+        - '&7Page %page%'
+      next-lore:
+        - '&7Page %page%'
+    level-name: '&8[%color_level%Level %level%&8]'
+    current-prefix: '&6&lCURRENT LEVEL'
+    locked-lore:
+      - '&eTotal XP Needed: &8( &7%total_xp_needed% &8)'
+      - '&eRankup XP Needed: &8( &7%xp_progression% &8/ %level_xp_needed% &8)'
+      - '&7'
+      - '&7&lLevel Unlock(s):'
+      - '&7'
+    unlocked-lore:
+      - '&eTotal XP Needed: &8( &7%total_xp_needed% &8)'
+      - '&eRankup XP Needed: &8( &7%xp_progression% &8/ %level_xp_needed% &8)'
+      - '&7'
+      - '&7&lLevel Unlock(s):'
+      - '&7'
+    current-lore:
+      - '&eTotal XP Needed: &8( &7%total_xp_needed% &8)'
+      - '&eRankup XP Needed: &8( &7%xp_progression% &8/ %level_xp_needed% &8)'
+      - '&7'
+      - '&7&lLevel Unlock(s):'
+      - '&7'
+    states:
+      locked:
+        material: RED_DYE
+      unlocked:
+        material: GREEN_DYE
+      current:
+        material: WRITABLE_BOOK
+  items:
+    empty:
+      material: GRAY_STAINED_GLASS_PANE
+      name: '&7'
+    progression:
+      slot: 21
+      material: MAP
+      name: '&e&lProgression Leveling'
+      lore:
+        - '&7'
+        - '&2> &fView the first &6100 levels&f,'
+        - '&2> &fUnlock &6attachments&f, &6backpack slots&f,'
+        - '&2> &fearn &bdiamonds &fand more!'
+        - '&7'
+        - '&b&lClick &fto open menu!'
+    prestige:
+      slot: 23
+      material: GOLD_NUGGET
+      name: '&e&lPrestige Leveling'
+      lore:
+        - '&7'
+        - '&2> &fEarn &eXP Points &f every'
+        - '&2> &65 &fand every &5100 levels'
+        - '&2> &fhas rewards!'
+        - '&7'
+      locked-line: '&4LOCKED (&fLvl.%unlock_level%&4)'
+      unlocked-line: '&b&lClick &fto open menu!'
+    daily-xp:
+      slot: 31
+      material: EXPERIENCE_BOTTLE
+      name: '&a&lDaily XP'
+      lore:
+        available:
+          - '&7Purchase XP every 24 hours to help level up!'
+          - '&7'
+          - '&7XP: %daily_xp%'
+          - '&7Price: %currency_symbol%%price_xp%'
+          - '&7'
+          - '&b&lClick &7to purchase XP!'
+        cooldown:
+          - '&7Purchase XP every 24 hours to help level up!'
+          - '&7'
+          - '&7XP: %daily_xp%'
+          - '&7Price: %currency_symbol%%price_xp%'
+          - '&cAvailable again in: &f%cooldown%'
+        locked:
+          - '&7Purchase XP every 24 hours to help level up!'
+          - '&7'
+          - '&4LOCKED (&fLvl.%unlock_level%&4)'
+    current-level:
+      slot: 49
+      material: EMERALD
+      name: '&7Current Level: &8&l(&2%level%&8&l)'
+      lore:
+        - '&7XP Progress: (&f%level_progression%&7)'
+        - '&7'
+        - '&7Rank Bonuses:'
+        - '&7> &fRank: &e%rank%'
+        - '&7> &fKills: &a%kill_bonus%%'
+        - '&7> &fDeaths: &a%death_bonus%%'
+        - '&7> &fLoot: &a%loot_bonus%%'
+  prestige:
+    title: '&6&lPrestige'
+    rows: 6
+    info-slot: 22
+    info:
+      material: NETHER_STAR
+      name: '&e&lPrestige %prestige%'
+      lore:
+        - '&7Current level: &e%level%'
+        - '&7Prestige mechanics are expandable.'
+    back:
+      slot: 47
+      material: REDSTONE
+      name: '&c&lBack'
+      lore:
+        - '&7Return to the Leveling Menu page!'
+  messages:
+    prestige-locked: '&cPrestige unlocks at Level 100.'
+messages:
+  daily-xp:
+    success: '&aPurchased %amount% XP for %currency_symbol%%price%!'
+    disabled: '&cDaily XP is disabled.'
+    locked: '&cDaily XP unlocks at Level 10.'
+    cooldown: '&cAvailable again in %cooldown%.'
+    insufficient-funds: '&cYou do not have enough money for Daily XP.'
+    cancelled: '&cThe Daily XP purchase was cancelled.'
+    withdrawal-failed: '&cCould not withdraw money for Daily XP.'
+    persistence-failed: '&cCould not save the Daily XP purchase.'
+    experience-grant-failed: '&cCould not grant Daily XP; your money was refunded.'
+    invalid-configuration: '&cDaily XP is currently unavailable.'
+    player-unavailable: '&cPlayer is unavailable.'

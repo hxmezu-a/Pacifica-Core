@@ -1,0 +1,24 @@
+rewards:
+  enabled: true
+  process-every-level-crossed: true
+  order:
+    - LEVEL
+    - EVERY_5
+    - EVERY_100
+  messages:
+    granted: ''
+    failed: ''
+levels:
+  10:
+    display:
+      lore:
+        - '&7'
+        - '&a> &fDaily XP unlocked'
+  100:
+    display:
+      lore:
+        - '&7'
+        - '&e> &fPrestige unlocked'
+milestones:
+  every-5: {}
+  every-100: {}

@@ -9,6 +9,7 @@ softdepend:
   - Pacifica-II
   - Pacifica-LootSystem
   - PlaceholderAPI
+  - LuckPerms
 commands:
   diamond:
     description: Show your Diamond Currency balance
@@ -30,7 +31,7 @@ commands:
     description: Manage Black Market item categories
     permission: blackmarket.admin.category
   level:
-    description: View your Pacifica Player Level and experience
+    description: Open the Pacifica Leveling menu
     aliases: [levels, playerlevel]
     permission: pacifica.level.command
   leveladmin:

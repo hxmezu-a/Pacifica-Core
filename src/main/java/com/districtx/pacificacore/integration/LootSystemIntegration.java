@@ -30,8 +30,8 @@ public final class LootSystemIntegration {
     @SuppressWarnings({"rawtypes", "unchecked"})
     public void refresh() {
         disable();
-        if (!plugin.getConfig().getBoolean("player-level.enabled", true)
-                || !plugin.getConfig().getBoolean("player-level.integrations.loot-system", true)) return;
+        if (!plugin.getLevelConfig().getBoolean("leveling.enabled", true)
+                || !plugin.getLevelConfig().getBoolean("leveling.integrations.loot-system", true)) return;
         Plugin lootSystem = plugin.getServer().getPluginManager().getPlugin("Pacifica-LootSystem");
         if (lootSystem == null || !lootSystem.isEnabled()) return;
         try {
@@ -55,8 +55,8 @@ public final class LootSystemIntegration {
     }
 
     private void awardFromLoot(Event event) {
-        if (!plugin.getConfig().getBoolean("player-level.enabled", true)
-                || !plugin.getConfig().getBoolean("player-level.integrations.loot-system", true)) return;
+        if (!plugin.getLevelConfig().getBoolean("leveling.enabled", true)
+                || !plugin.getLevelConfig().getBoolean("leveling.integrations.loot-system", true)) return;
         try {
             Object result = event.getClass().getMethod("getResult").invoke(event);
             if (result == null) return;
@@ -64,7 +64,7 @@ public final class LootSystemIntegration {
             if (!(experience instanceof Number number) || number.doubleValue() <= 0.0) return;
             Object rewardedPlayer = event.getClass().getMethod("getPlayer").invoke(event);
             if (!(rewardedPlayer instanceof Player player)) return;
-            double reward = plugin.getConfig().getDouble("player-level.experience.loot", 1.5);
+            double reward = plugin.getLevelConfig().getDouble("leveling.xp-sources.loot", 1.5);
             if (Double.isFinite(reward) && reward > 0.0) {
                 plugin.getAPI().getPlayerLevelService().addExperience(
                         player.getUniqueId(), reward, ExperienceSource.LOOT);

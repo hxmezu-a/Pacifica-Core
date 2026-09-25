@@ -8,6 +8,8 @@ public enum ExperienceSource {
     PVP_DEATH,
     /** Experience granted from Pacifica-LootSystem. */
     LOOT,
+    /** Experience purchased through the Daily XP feature. */
+    DAILY_XP,
     /** Experience granted by an administrator. */
     ADMIN,
     /** Experience granted by another plugin using the public API. */

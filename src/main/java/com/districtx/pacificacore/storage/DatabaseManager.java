@@ -67,6 +67,15 @@ public final class DatabaseManager implements AutoCloseable {
                         + "balance TEXT NOT NULL DEFAULT '0')");
                 statement.executeUpdate("CREATE TABLE IF NOT EXISTS player_levels ("
                         + "uuid TEXT PRIMARY KEY, experience REAL NOT NULL DEFAULT 0.0)");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS player_level_reward_claims ("
+                        + "uuid TEXT NOT NULL, reward_id TEXT NOT NULL, claimed_at INTEGER NOT NULL, "
+                        + "PRIMARY KEY (uuid, reward_id))");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS player_level_daily_xp ("
+                        + "uuid TEXT PRIMARY KEY, last_purchase INTEGER NOT NULL DEFAULT 0)");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS player_level_prestige ("
+                        + "uuid TEXT PRIMARY KEY, prestige INTEGER NOT NULL DEFAULT 0)");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS player_level_pending_rewards ("
+                        + "uuid TEXT PRIMARY KEY, previous_level INTEGER NOT NULL, new_level INTEGER NOT NULL)");
             }
             return null;
         });

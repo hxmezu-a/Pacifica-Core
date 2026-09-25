@@ -15,60 +15,6 @@ messages:
   set: '&aSet %player%''s %currency% balance to %amount%.'
   removed: '&aRemoved %amount% %currency% from %player%.'
   usage: '&e/core reload|dgive|bgive|reset|get|set ...'
-player-level:
-  enabled: true
-  min-level: 1
-  max-level: 100
-  progression:
-    type: linear
-    experience-per-level: 100.0
-  experience:
-    player-kill: 3.0
-    pvp-death: 1.0
-    loot: 1.5
-  integrations:
-    loot-system: true
-    placeholder-api: true
-  messages:
-    experience:
-      enabled: true
-      chat: true
-      action-bar: false
-      sound:
-        enabled: false
-        sound: ENTITY_PLAYER_LEVELUP
-        volume: 1.0
-        pitch: 1.0
-      player-kill: '&8[&6&lLEVEL&8] &a+%amount% XP &7for killing a player!'
-      pvp-death: '&8[&6&lLEVEL&8] &a+%amount% XP &7from PvP combat!'
-      loot: '&8[&6&lLEVEL&8] &a+%amount% XP &7from loot!'
-      generic: '&8[&6&lLEVEL&8] &a+%amount% XP'
-    level-up:
-      enabled: true
-      message: '&6&lLEVEL UP! &7You reached &eLevel %new_level%&7!'
-    commands:
-      self: |-
-        &6&lPlayer Level
-        &7Level: &e%level%
-        &7Experience: &a%exp%
-        &7Progress: &b%progress%%
-        &7XP to next level: &f%exp_to_next_level%
-      info: |-
-        &6&lPlayer Level &7— &e%player%
-        &7Level: &e%level%
-        &7Experience: &a%exp%
-        &7Progress: &b%progress%%
-        &7XP to next level: &f%exp_to_next_level%
-      usage: '&e/leveladmin set <player> <level>|addxp <player> <amount>|setxp <player> <amount>|removexp <player> <amount>|info <player>'
-      updated: '&aUpdated %player%''s Pacifica level data.'
-      invalid-level: '&cLevel must be within the configured level range.'
-      invalid-experience: '&cEnter a valid non-negative experience amount.'
-      level-up: '&aSet %player%''s Pacifica level to %level%.'
-      added: '&aAdded %amount% Pacifica XP to %player%.'
-      set-experience: '&aSet %player%''s Pacifica XP to %amount%.'
-      removed: '&aRemoved %amount% Pacifica XP from %player%.'
-debug:
-  player-level-xp: false
 black-market:
   durations-hours: [8, 16, 24, 48]
   enabled: true
