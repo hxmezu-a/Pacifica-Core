@@ -1,0 +1,104 @@
+storage-file: balance.db
+messages:
+  prefix: '&8[&bPacifica-Core&8] &r'
+  no-permission: '&cYou do not have permission.'
+  players-only: '&cOnly players can use this command.'
+  invalid-amount: '&cEnter a valid non-negative amount.'
+  invalid-currency: '&cCurrency must be diamond or balance.'
+  player-not-found: '&cPlayer not found.'
+  balance-diamond: '&bDiamond&7: &b%amount%'
+  balance-money: '&7Balance: &a$%amount%'
+  balance-other: '&7Balance of &e%player%&7: &a$%amount%'
+  reloaded: '&aPacifica-Core configuration reloaded.'
+  updated: '&aUpdated %player%''s %currency% balance by %amount%.'
+  reset: '&aReset %player%''s %currency% balance.'
+  set: '&aSet %player%''s %currency% balance to %amount%.'
+  removed: '&aRemoved %amount% %currency% from %player%.'
+  usage: '&e/core reload|dgive|bgive|reset|get|set ...'
+player-level:
+  enabled: true
+  min-level: 1
+  max-level: 100
+  progression:
+    type: linear
+    experience-per-level: 100.0
+  experience:
+    player-kill: 3.0
+    pvp-death: 1.0
+    loot: 1.5
+  integrations:
+    loot-system: true
+    placeholder-api: true
+  messages:
+    experience:
+      enabled: true
+      chat: true
+      action-bar: false
+      sound:
+        enabled: false
+        sound: ENTITY_PLAYER_LEVELUP
+        volume: 1.0
+        pitch: 1.0
+      player-kill: '&8[&6&lLEVEL&8] &a+%amount% XP &7for killing a player!'
+      pvp-death: '&8[&6&lLEVEL&8] &a+%amount% XP &7from PvP combat!'
+      loot: '&8[&6&lLEVEL&8] &a+%amount% XP &7from loot!'
+      generic: '&8[&6&lLEVEL&8] &a+%amount% XP'
+    level-up:
+      enabled: true
+      message: '&6&lLEVEL UP! &7You reached &eLevel %new_level%&7!'
+    commands:
+      self: |-
+        &6&lPlayer Level
+        &7Level: &e%level%
+        &7Experience: &a%exp%
+        &7Progress: &b%progress%%
+        &7XP to next level: &f%exp_to_next_level%
+      info: |-
+        &6&lPlayer Level &7— &e%player%
+        &7Level: &e%level%
+        &7Experience: &a%exp%
+        &7Progress: &b%progress%%
+        &7XP to next level: &f%exp_to_next_level%
+      usage: '&e/leveladmin set <player> <level>|addxp <player> <amount>|setxp <player> <amount>|removexp <player> <amount>|info <player>'
+      updated: '&aUpdated %player%''s Pacifica level data.'
+      invalid-level: '&cLevel must be within the configured level range.'
+      invalid-experience: '&cEnter a valid non-negative experience amount.'
+      level-up: '&aSet %player%''s Pacifica level to %level%.'
+      added: '&aAdded %amount% Pacifica XP to %player%.'
+      set-experience: '&aSet %player%''s Pacifica XP to %amount%.'
+      removed: '&aRemoved %amount% Pacifica XP from %player%.'
+debug:
+  player-level-xp: false
+black-market:
+  durations-hours: [8, 16, 24, 48]
+  enabled: true
+  tax-percent: 0
+  item-matching:
+    ignore-damage: true
+  durations:
+    8h:
+      duration: 8h
+      tax: 0
+      tax-mode: percent
+    16h:
+      duration: 16h
+      tax: 0.5
+      tax-mode: percent
+    24h:
+      duration: 24h
+      tax: 1.0
+      tax-mode: percent
+    48h:
+      duration: 48h
+      tax: 2.0
+      tax-mode: percent
+  auction:
+    losing-bid-refund-percent: 70
+  categories:
+    weapon: true
+    armor: true
+    player-head: true
+    rare: true
+    cheat-code: true
+    cosmetics: true
+    misc: true
