@@ -4,6 +4,7 @@ import java.util.UUID;
 
 /** Immutable summary of one Pacifica experience gain attempt. */
 public final class ExperienceGainResult {
+    private final UUID transactionId;
     private final UUID playerId;
     private final double previousExperience;
     private final double experienceAdded;
@@ -26,6 +27,7 @@ public final class ExperienceGainResult {
     public ExperienceGainResult(UUID playerId, double previousExperience, double experienceAdded,
                                 double newExperience, int previousLevel, int newLevel,
                                 ExperienceSource source) {
+        this.transactionId = UUID.randomUUID();
         this.playerId = playerId;
         this.previousExperience = previousExperience;
         this.experienceAdded = experienceAdded;
@@ -34,6 +36,9 @@ public final class ExperienceGainResult {
         this.newLevel = newLevel;
         this.source = source;
     }
+
+    /** @return unique identifier for this experience gain attempt */
+    public UUID getTransactionId() { return transactionId; }
 
     /** @return UUID of the player whose experience was changed */
     public UUID getPlayerId() { return playerId; }

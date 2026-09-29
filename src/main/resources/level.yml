@@ -8,7 +8,6 @@ leveling:
   xp-sources:
     player-kill: 3.0
     pvp-death: 1.0
-    loot: 1.5
   integrations:
     loot-system: true
     placeholder-api: true
@@ -21,12 +20,18 @@ leveling:
         enabled: false
         sound: ENTITY_PLAYER_LEVELUP
         volume: 1.0
-        pitch: 1.0
-      player-kill: '&8[&6&lLEVEL&8] &a+%amount% XP &7for killing a player!'
-      pvp-death: '&8[&6&lLEVEL&8] &a+%amount% XP &7from PvP combat!'
-      loot: '&8[&6&lLEVEL&8] &a+%amount% XP &7from loot!'
-      generic: '&8[&6&lLEVEL&8] &a+%amount% XP'
-      daily-xp: '&8[&6&lLEVEL&8] &a+%amount% XP from Daily XP!'
+        pitch: 2.0
+      advancement:
+        enabled: true
+        toast: true
+        chat-announcement: false
+        chat-message: '&e&l+ &a&l%xp%'
+        title: '&a&lExperience Gained'
+        description: '&7You gained Player Level experience.'
+        icon: EXPERIENCE_BOTTLE
+        frame: TASK
+        background: ''
+    experience-gain: '&e&l+ &a&l%xp%'
     level-up:
       enabled: true
       message: '&6&lLEVEL UP! &7You reached &eLevel %new_level%&7!'
@@ -53,6 +58,7 @@ leveling:
         &7XP to next level: &f%exp_to_next_level%
   debug:
     xp: false
+    advancements: false
 daily-xp:
   enabled: true
   unlock-level: 10

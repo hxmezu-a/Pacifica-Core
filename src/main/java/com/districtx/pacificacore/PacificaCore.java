@@ -1,6 +1,7 @@
 package com.districtx.pacificacore;
 
 import com.districtx.pacificacore.api.DiamondCurrencyService;
+import com.districtx.pacificacore.api.AdvancementNotificationService;
 import com.districtx.pacificacore.api.EconomyService;
 import com.districtx.pacificacore.api.PacificaCoreAPI;
 import com.districtx.pacificacore.api.PacificaCoreAPIImpl;
@@ -29,6 +30,7 @@ import com.districtx.pacificacore.integration.RankExperienceBonusManager;
 import com.districtx.pacificacore.integration.LootSystemIntegration;
 import com.districtx.pacificacore.integration.PacificaCombatTagIntegration;
 import com.districtx.pacificacore.level.PlayerLevelListener;
+import com.districtx.pacificacore.level.AdvancementNotificationManager;
 import com.districtx.pacificacore.market.BlackMarketManager;
 import com.districtx.pacificacore.market.BlackMarketService;
 import com.districtx.pacificacore.vault.PacificaEconomyProvider;
@@ -72,6 +74,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
     private PrestigeManager prestige;
     private RankExperienceBonusManager rankBonuses;
     private LevelMenuManager levelMenus;
+    private AdvancementNotificationManager advancementNotifications;
     private LootSystemIntegration lootSystemIntegration;
     private Object playerLevelPlaceholderExpansion;
 
@@ -110,8 +113,10 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
         prestige = new PrestigeManager(this, playerLevels, new PrestigeRepository(this, database));
         levelMenus = new LevelMenuManager(this, playerLevels, levelRewards, dailyExperience, prestige, rankBonuses);
         playerLevels.setLevelMenuService(levelMenus);
+        advancementNotifications = new AdvancementNotificationManager(this);
+        getServer().getPluginManager().registerEvents(advancementNotifications, this);
         api = new PacificaCoreAPIImpl(diamonds, economy, transactions, playerLevels, levelRewards,
-                dailyExperience, prestige, rankBonuses, levelMenus);
+                dailyExperience, prestige, rankBonuses, levelMenus, advancementNotifications);
         blackMarket = new BlackMarketManager(this, database, economy);
         getServer().getPluginManager().registerEvents(blackMarket, this);
         getServer().getPluginManager().registerEvents(levelMenus, this);
@@ -121,6 +126,8 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
         getServer().getServicesManager().register(PrestigeService.class, prestige, this, ServicePriority.Normal);
         getServer().getServicesManager().register(RankExperienceBonusService.class, rankBonuses, this, ServicePriority.Normal);
         getServer().getServicesManager().register(LevelMenuService.class, levelMenus, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(AdvancementNotificationService.class, advancementNotifications,
+                this, ServicePriority.Normal);
         getServer().getServicesManager().register(DiamondCurrencyService.class, diamonds, this, ServicePriority.Normal);
         getServer().getServicesManager().register(EconomyService.class, economy, this, ServicePriority.Normal);
         getServer().getServicesManager().register(TransactionService.class, transactions, this, ServicePriority.Normal);
@@ -379,6 +386,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
     private void reloadPlayerLevelConfiguration() {
         reloadLevelConfigurations();
         if (playerLevels != null) playerLevels.reload();
+        if (advancementNotifications != null) advancementNotifications.reload();
         if (lootSystemIntegration != null) lootSystemIntegration.refresh();
         refreshPlayerLevelPlaceholderExpansion();
         for (Player player : Bukkit.getOnlinePlayers()) {

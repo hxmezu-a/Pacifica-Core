@@ -28,4 +28,7 @@ public interface PacificaCoreAPI {
 
     /** Gets the public Level and Prestige menu controller. */
     LevelMenuService getLevelMenuService();
+
+    /** Gets the configured repeatable XP advancement notification service. */
+    default AdvancementNotificationService getAdvancementNotificationService() { return null; }
 }

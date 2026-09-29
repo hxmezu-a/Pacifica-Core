@@ -61,10 +61,10 @@ public final class LootSystemIntegration {
             Object result = event.getClass().getMethod("getResult").invoke(event);
             if (result == null) return;
             Object experience = result.getClass().getMethod("getExperience").invoke(result);
-            if (!(experience instanceof Number number) || number.doubleValue() <= 0.0) return;
+            if (!(experience instanceof Number number)) return;
             Object rewardedPlayer = event.getClass().getMethod("getPlayer").invoke(event);
             if (!(rewardedPlayer instanceof Player player)) return;
-            double reward = plugin.getLevelConfig().getDouble("leveling.xp-sources.loot", 1.5);
+            double reward = number.doubleValue();
             if (Double.isFinite(reward) && reward > 0.0) {
                 plugin.getAPI().getPlayerLevelService().addExperience(
                         player.getUniqueId(), reward, ExperienceSource.LOOT);

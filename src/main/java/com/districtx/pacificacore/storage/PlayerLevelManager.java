@@ -9,8 +9,10 @@ import com.districtx.pacificacore.api.LevelRewardService;
 import com.districtx.pacificacore.api.RankExperienceBonusService;
 import com.districtx.pacificacore.api.LevelMenuService;
 import com.districtx.pacificacore.api.event.PlayerExperienceGainEvent;
+import com.districtx.pacificacore.api.event.PlayerExperienceGrantedEvent;
 import com.districtx.pacificacore.api.event.PlayerLevelUpEvent;
 import com.districtx.pacificacore.api.event.PrestigeUnlockEvent;
+import com.districtx.pacificacore.level.ExperienceFormatter;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
@@ -201,8 +203,9 @@ public final class PlayerLevelManager implements PlayerLevelService {
         int newLevel = progression.getLevel(change.current());
         ExperienceGainResult result = result(playerId, change.previous(), change.current() - change.previous(),
                 change.current(), progression.getLevel(change.previous()), newLevel, source);
+        Bukkit.getPluginManager().callEvent(new PlayerExperienceGrantedEvent(result));
         fireLevelUp(playerId, change.previous(), change.current());
-        notifyExperience(player, amount, change.current(), newLevel, source);
+        notifyExperience(player, result.getExperienceAdded(), change.current(), newLevel);
         refreshMenu(playerId);
         if (plugin.getLevelConfig().getBoolean("leveling.debug.xp", false)) {
             plugin.getLogger().info("Player Level XP: player=" + playerId + " source=" + source
@@ -259,22 +262,15 @@ public final class PlayerLevelManager implements PlayerLevelService {
         }
     }
 
-    private void notifyExperience(Player player, double amount, double newExperience, int level,
-                                  ExperienceSource source) {
+    private void notifyExperience(Player player, double amount, double newExperience, int level) {
         if (player == null || !plugin.getLevelConfig().getBoolean("leveling.messages.experience.enabled", true)) return;
-        String sourceKey = switch (source) {
-            case PLAYER_KILL -> "player-kill";
-            case PVP_DEATH -> "pvp-death";
-            case LOOT -> "loot";
-            case DAILY_XP -> "daily-xp";
-            default -> "generic";
-        };
-        String message = plugin.getLevelConfig().getString("leveling.messages.experience." + sourceKey,
-                "&a+%amount% XP");
-        message = message.replace("%amount%", format(amount))
+        String message = plugin.getLevelConfig().getString("leveling.messages.experience-gain",
+                "&e&l+ &a&l%xp%");
+        message = message.replace("%xp%", ExperienceFormatter.formatReward(amount))
                 .replace("%level%", String.valueOf(level))
                 .replace("%exp%", format(newExperience))
                 .replace("%exp_to_next_level%", format(progression.getExperienceToNextLevel(newExperience)));
+        message = ExperienceFormatter.applyPlaceholders(player, message);
         String colored = color(message);
         if (plugin.getLevelConfig().getBoolean("leveling.messages.experience.chat", true)) {
             player.sendMessage(colored);

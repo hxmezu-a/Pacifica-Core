@@ -1,13 +1,12 @@
 name: Pacifica-Core
 version: ${version}
 main: com.districtx.pacificacore.PacificaCore
-api-version: '1.20'
+api-version: '1.21'
 author: DistrictX Developers Officials
 depend:
   - Vault
 softdepend:
   - Pacifica-II
-  - Pacifica-LootSystem
   - PlaceholderAPI
   - LuckPerms
 commands:
