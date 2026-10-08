@@ -12,6 +12,18 @@ import com.districtx.pacificacore.api.PrestigeService;
 import com.districtx.pacificacore.api.RankExperienceBonusService;
 import com.districtx.pacificacore.api.LevelMenuService;
 import com.districtx.pacificacore.api.TransactionService;
+import com.districtx.pacificacore.api.ShopAccessService;
+import com.districtx.pacificacore.api.SpawnShopService;
+import com.districtx.pacificacore.api.SpawnShopNpcLinkService;
+import com.districtx.pacificacore.api.NpcLinkService;
+import com.districtx.pacificacore.api.SpawnShopSlotService;
+import com.districtx.pacificacore.command.SpawnShopCommand;
+import com.districtx.pacificacore.command.SpawnShopAdminCommand;
+import com.districtx.pacificacore.command.AdminCommand;
+import com.districtx.pacificacore.command.CoreAdminCommand;
+import com.districtx.pacificacore.command.CurrencyAdminSubCommand;
+import com.districtx.pacificacore.shop.SpawnShopManager;
+import com.districtx.pacificacore.shop.SpawnShopGuiManager;
 import com.districtx.pacificacore.command.PlayerLevelCommand;
 import com.districtx.pacificacore.economy.DiamondCurrencyServiceImpl;
 import com.districtx.pacificacore.economy.EconomyServiceImpl;
@@ -21,6 +33,9 @@ import com.districtx.pacificacore.storage.DatabaseManager;
 import com.districtx.pacificacore.storage.PlayerLevelManager;
 import com.districtx.pacificacore.storage.DailyExperienceRepository;
 import com.districtx.pacificacore.storage.PrestigeRepository;
+import com.districtx.pacificacore.storage.NpcLinkManager;
+import com.districtx.pacificacore.storage.SpawnShopNpcLinkManager;
+import com.districtx.pacificacore.storage.SpawnShopRepository;
 import com.districtx.pacificacore.level.reward.LevelRewardManager;
 import com.districtx.pacificacore.level.DailyExperienceManager;
 import com.districtx.pacificacore.level.PrestigeManager;
@@ -41,7 +56,6 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -53,13 +67,10 @@ import java.text.NumberFormat;
 import java.io.File;
 import java.io.IOException;
 import java.util.UUID;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
-public final class PacificaCore extends JavaPlugin implements CommandExecutor, TabCompleter {
+public final class PacificaCore extends JavaPlugin implements CommandExecutor {
     private static PacificaCore instance;
     private PacificaCoreAPI api;
     private DatabaseManager database;
@@ -77,6 +88,9 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
     private AdvancementNotificationManager advancementNotifications;
     private LootSystemIntegration lootSystemIntegration;
     private Object playerLevelPlaceholderExpansion;
+    private NpcLinkManager npcLinks;
+    private SpawnShopNpcLinkManager spawnShopNpcLinks;
+    private SpawnShopManager spawnShops;
 
     public static PacificaCore getInstance() { return instance; }
     public static PacificaCoreAPI getAPI() { return instance == null ? null : instance.api; }
@@ -103,6 +117,13 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
         playerLevels = new PlayerLevelManager(this, database);
         DiamondCurrencyService diamonds = new DiamondCurrencyServiceImpl(storage);
         EconomyService economy = new EconomyServiceImpl(storage);
+        spawnShops = new SpawnShopManager(this, new SpawnShopRepository(this, database), playerLevels,
+                new PacificaEconomyProvider(economy));
+        SpawnShopGuiManager spawnShopGuis = new SpawnShopGuiManager(this, spawnShops);
+        spawnShops.setGuiManager(spawnShopGuis);
+        getServer().getPluginManager().registerEvents(spawnShopGuis, this);
+        npcLinks = new NpcLinkManager(this, database);
+        spawnShopNpcLinks = new SpawnShopNpcLinkManager(this, database, npcLinks);
         TransactionService transactions = new TransactionServiceImpl(storage);
         levelRewards = new LevelRewardManager(this, database, playerLevels, economy, diamonds);
         playerLevels.setRewardService(levelRewards);
@@ -116,7 +137,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
         advancementNotifications = new AdvancementNotificationManager(this);
         getServer().getPluginManager().registerEvents(advancementNotifications, this);
         api = new PacificaCoreAPIImpl(diamonds, economy, transactions, playerLevels, levelRewards,
-                dailyExperience, prestige, rankBonuses, levelMenus, advancementNotifications);
+                dailyExperience, prestige, rankBonuses, levelMenus, advancementNotifications, npcLinks);
         blackMarket = new BlackMarketManager(this, database, economy);
         getServer().getPluginManager().registerEvents(blackMarket, this);
         getServer().getPluginManager().registerEvents(levelMenus, this);
@@ -133,21 +154,28 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
         getServer().getServicesManager().register(TransactionService.class, transactions, this, ServicePriority.Normal);
         getServer().getServicesManager().register(PlayerLevelService.class, playerLevels, this, ServicePriority.Normal);
         getServer().getServicesManager().register(PacificaCoreAPI.class, api, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(SpawnShopService.class, spawnShops, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(NpcLinkService.class, npcLinks, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(SpawnShopNpcLinkService.class, spawnShopNpcLinks, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(SpawnShopSlotService.class, spawnShops, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(ShopAccessService.class, spawnShops, this, ServicePriority.Normal);
         getServer().getServicesManager().register(BlackMarketService.class, blackMarket.getService(), this, ServicePriority.Normal);
         getServer().getServicesManager().register(Economy.class, new PacificaEconomyProvider(economy), this,
                 ServicePriority.Highest);
         getCommand("diamond").setExecutor(this);
         getCommand("bal").setExecutor(this);
-        getCommand("core").setExecutor(this);
-        getCommand("core").setTabCompleter(this);
         getCommand("bm").setExecutor(blackMarket);
-        getCommand("bmadmin").setExecutor(blackMarket);
+        getCommand("spawnshop").setExecutor(new SpawnShopCommand(this, spawnShopGuis));
+        SpawnShopAdminCommand spawnShopAdminCommand = new SpawnShopAdminCommand(this, spawnShops,
+                npcLinks, spawnShopNpcLinks);
         PlayerLevelCommand levelCommand = new PlayerLevelCommand(this);
         getCommand("level").setExecutor(levelCommand);
-        getCommand("level").setTabCompleter(levelCommand);
-        getCommand("leveladmin").setExecutor(levelCommand);
-        getCommand("leveladmin").setTabCompleter(levelCommand);
-        blackMarket.cleanupExpiredOffers();
+        AdminCommand adminCommand = new AdminCommand(List.of(blackMarket, spawnShopAdminCommand,
+                new CoreAdminCommand(this), new CurrencyAdminSubCommand(this, "diamonds", true),
+                new CurrencyAdminSubCommand(this, "balance", false), levelCommand));
+        getCommand("admin").setExecutor(adminCommand);
+        getCommand("admin").setTabCompleter(adminCommand);
+        blackMarket.scheduleExpiredOfferCleanup();
         PacificaCombatTagIntegration combatTagIntegration = new PacificaCombatTagIntegration(this);
         getServer().getPluginManager().registerEvents(new PlayerLevelListener(this, playerLevels, combatTagIntegration), this);
         for (Player online : Bukkit.getOnlinePlayers()) {
@@ -165,6 +193,8 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
     public void onDisable() {
         getServer().getServicesManager().unregister(this);
         if (lootSystemIntegration != null) lootSystemIntegration.disable();
+        if (npcLinks != null) npcLinks.shutdown();
+        if (spawnShopNpcLinks != null) spawnShopNpcLinks.shutdown();
         unregisterPlayerLevelPlaceholderExpansion();
         if (blackMarket != null) blackMarket.close();
         if (database != null) database.close();
@@ -179,47 +209,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
             return send(sender, "balance-diamond", "amount", format(api.getDiamondCurrencyService().getBalance(player.getUniqueId())));
         }
         if (command.getName().equalsIgnoreCase("bal")) return balance(sender, args);
-        if (label.equalsIgnoreCase("dmdadmin")) return diamondAdminCommand(sender, args);
-        return coreCommand(sender, args);
-    }
-
-    private boolean diamondAdminCommand(CommandSender sender, String[] args) {
-        if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
-            if (!sender.hasPermission("pacifica.core.admin.reload")) return tell(sender, "no-permission");
-            reloadConfig();
-            messages.reload();
-            reloadPlayerLevelConfiguration();
-            return tell(sender, "reloaded");
-        }
-        if (args.length < 2 || args.length > 3) return tell(sender, "usage");
-        String action = args[0].toLowerCase(Locale.ROOT);
-        if (!Arrays.asList("give", "remove", "set", "reset").contains(action)) return tell(sender, "usage");
-        OfflinePlayer target = findPlayer(args[1]);
-        if (target == null) return tell(sender, "player-not-found");
-        BigDecimal amount = BigDecimal.ZERO;
-        if (!action.equals("reset")) {
-            if (args.length != 3) return tell(sender, "usage");
-            try {
-                amount = new BigDecimal(args[2]);
-            } catch (NumberFormatException exception) {
-                return tell(sender, "invalid-amount");
-            }
-            if (amount.signum() < 0 || amount.scale() > 8) return tell(sender, "invalid-amount");
-        } else if (args.length != 2) return tell(sender, "usage");
-        String permission = "pacifica.core.admin." + (action.equals("remove") ? "get" : action.equals("give") ? "dgive" : action);
-        if (!sender.hasPermission(permission)) return tell(sender, "no-permission");
-        boolean success = action.equals("give")
-                ? api.getDiamondCurrencyService().deposit(target.getUniqueId(), amount)
-                : action.equals("remove")
-                ? api.getDiamondCurrencyService().withdraw(target.getUniqueId(), amount)
-                : action.equals("set")
-                ? api.getDiamondCurrencyService().setBalance(target.getUniqueId(), amount)
-                : api.getDiamondCurrencyService().resetBalance(target.getUniqueId());
-        if (!success) return tell(sender, "invalid-amount");
-        return send(sender, action.equals("reset") ? "reset" : action.equals("set") ? "set"
-                        : action.equals("remove") ? "removed" : "updated",
-                "player", target.getName() == null ? args[1] : target.getName(), "currency", "diamond",
-                "amount", format(amount));
+        return false;
     }
 
     private boolean balance(CommandSender sender, String[] args) {
@@ -234,74 +224,6 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
         String key = args.length == 1 ? "balance-other" : "balance-money";
         return send(sender, key, "player", target.getName() == null ? args[0] : target.getName(),
                 "amount", format(api.getEconomyService().getBalance(target.getUniqueId())));
-    }
-
-    private boolean coreCommand(CommandSender sender, String[] args) {
-        if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
-            if (!sender.hasPermission("pacifica.core.admin.reload")) return tell(sender, "no-permission");
-            reloadConfig();
-            messages.reload();
-            reloadPlayerLevelConfiguration();
-            return tell(sender, "reloaded");
-        }
-        if (args.length != 4 && args.length != 3) return tell(sender, "usage");
-        String action = args[0].toLowerCase(Locale.ROOT);
-        String type;
-        String playerName;
-        String amountText = null;
-        String permission;
-        if (action.equals("dgive") || action.equals("bgive")) {
-            if (args.length != 3) return tell(sender, "usage");
-            type = action.equals("dgive") ? "diamond" : "balance";
-            playerName = args[1]; amountText = args[2]; permission = "pacifica.core.admin." + action;
-            action = "give";
-        } else {
-            if (action.equals("reset")) {
-                if (args.length != 3) return tell(sender, "usage");
-                type = args[1].toLowerCase(Locale.ROOT); playerName = args[2];
-            } else {
-                if (args.length != 4) return tell(sender, "usage");
-                type = args[1].toLowerCase(Locale.ROOT); playerName = args[2]; amountText = args[3];
-            }
-            permission = "pacifica.core.admin." + (args[0].equalsIgnoreCase("get") ? "get" : args[0].toLowerCase(Locale.ROOT));
-            action = args[0].toLowerCase(Locale.ROOT);
-        }
-        if (!sender.hasPermission(permission)) return tell(sender, "no-permission");
-        if (!type.equals("diamond") && !type.equals("balance")) return tell(sender, "invalid-currency");
-        OfflinePlayer target = findPlayer(playerName);
-        if (target == null) return tell(sender, "player-not-found");
-        BigDecimal amount = BigDecimal.ZERO;
-        if (!action.equals("reset")) {
-            try { amount = new BigDecimal(amountText); } catch (NumberFormatException exception) { return tell(sender, "invalid-amount"); }
-            if (amount.signum() < 0 || amount.scale() > 8) return tell(sender, "invalid-amount");
-        }
-        boolean success;
-        if (action.equals("give")) success = mutate(type, target, amount, true, false, false);
-        else if (action.equals("get")) success = mutate(type, target, amount, false, true, false);
-        else if (action.equals("set")) success = mutate(type, target, amount, false, false, true);
-        else if (action.equals("reset")) success = reset(type, target);
-        else return tell(sender, "usage");
-        if (!success) return tell(sender, "invalid-amount");
-        return send(sender, action.equals("reset") ? "reset" : action.equals("set") ? "set" : action.equals("get") ? "removed" : "updated",
-                "player", playerName, "currency", type, "amount", format(amount));
-    }
-
-    private boolean mutate(String type, OfflinePlayer player, BigDecimal amount,
-                           boolean deposit, boolean withdraw, boolean set) {
-        if (type.equals("diamond")) {
-            if (deposit) return api.getDiamondCurrencyService().deposit(player.getUniqueId(), amount);
-            if (withdraw) return api.getDiamondCurrencyService().withdraw(player.getUniqueId(), amount);
-            return set && api.getDiamondCurrencyService().setBalance(player.getUniqueId(), amount);
-        }
-        if (deposit) return api.getEconomyService().deposit(player.getUniqueId(), amount);
-        if (withdraw) return api.getEconomyService().withdraw(player.getUniqueId(), amount);
-        return set && api.getEconomyService().setBalance(player.getUniqueId(), amount);
-    }
-
-    private boolean reset(String type, OfflinePlayer player) {
-        return type.equals("diamond")
-                ? api.getDiamondCurrencyService().resetBalance(player.getUniqueId())
-                : api.getEconomyService().resetBalance(player.getUniqueId());
     }
 
     private OfflinePlayer findPlayer(String name) {
@@ -322,6 +244,24 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
 
     private String format(BigDecimal amount) {
         return NumberFormat.getNumberInstance(Locale.US).format(amount);
+    }
+
+    public OfflinePlayer findOfflinePlayer(String name) {
+        return findPlayer(name);
+    }
+
+    public boolean sendAdminMessage(CommandSender sender, String key, String... values) {
+        return send(sender, key, values);
+    }
+
+    public String formatAmount(BigDecimal amount) {
+        return format(amount);
+    }
+
+    public void reloadAdministrativeConfiguration() {
+        reloadConfig();
+        messages.reload();
+        reloadPlayerLevelConfiguration();
     }
 
     private void migrateYamlCurrency() {
@@ -366,21 +306,6 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor, T
             }
         }
         return successful;
-    }
-
-    @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (args.length == 1) return partial(args[0], Arrays.asList("reload", "dgive", "bgive", "reset", "get", "set"));
-        if (args.length == 2 && !args[0].equalsIgnoreCase("dgive") && !args[0].equalsIgnoreCase("bgive")) {
-            return partial(args[1], Arrays.asList("diamond", "balance"));
-        }
-        return Collections.emptyList();
-    }
-
-    private List<String> partial(String input, List<String> values) {
-        List<String> result = new ArrayList<>();
-        for (String value : values) if (value.startsWith(input.toLowerCase(Locale.ROOT))) result.add(value);
-        return result;
     }
 
     private void reloadPlayerLevelConfiguration() {

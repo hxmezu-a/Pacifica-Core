@@ -31,4 +31,7 @@ public interface PacificaCoreAPI {
 
     /** Gets the configured repeatable XP advancement notification service. */
     default AdvancementNotificationService getAdvancementNotificationService() { return null; }
+
+    /** Gets the identifier-only service for linking features to external NPCs. */
+    default NpcLinkService getNpcLinkService() { return null; }
 }

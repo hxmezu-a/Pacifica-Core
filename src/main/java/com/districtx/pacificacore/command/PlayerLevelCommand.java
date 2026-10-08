@@ -4,25 +4,23 @@ import com.districtx.pacificacore.PacificaCore;
 import com.districtx.pacificacore.api.ExperienceGainResult;
 import com.districtx.pacificacore.api.ExperienceSource;
 import com.districtx.pacificacore.api.PlayerLevelService;
+import com.districtx.pacificacore.command.AdminSubCommand;
+import com.districtx.pacificacore.level.ExperienceFormatter;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 /** Implements the player-facing and administrative Player Level commands. */
-public final class PlayerLevelCommand implements CommandExecutor, TabCompleter {
+public final class PlayerLevelCommand implements CommandExecutor, AdminSubCommand {
     private final PacificaCore plugin;
 
     /**
@@ -34,10 +32,26 @@ public final class PlayerLevelCommand implements CommandExecutor, TabCompleter {
         this.plugin = plugin;
     }
 
+    @Override public String getName() { return "level"; }
+    @Override public List<String> getAliases() { return List.of("levels"); }
+    @Override public String getPermission() { return "pacifica.admin.level"; }
+
+    @Override
+    public boolean canAccess(CommandSender sender) {
+        if (AdminSubCommand.super.canAccess(sender) || sender.hasPermission("pacifica.level.admin")) return true;
+        return List.of("set", "addxp", "setxp", "removexp", "info").stream()
+                .anyMatch(action -> sender.hasPermission("pacifica.level." + action));
+    }
+
+    @Override
+    public boolean execute(CommandSender sender, String[] args) {
+        return admin(sender, args);
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (command.getName().equalsIgnoreCase("level")) return showLevel(sender, args);
-        return admin(sender, args);
+        return false;
     }
 
     private boolean showLevel(CommandSender sender, String[] args) {
@@ -146,20 +160,27 @@ public final class PlayerLevelCommand implements CommandExecutor, TabCompleter {
     }
 
     private String format(double amount) {
-        return BigDecimal.valueOf(amount).stripTrailingZeros().toPlainString();
+        return ExperienceFormatter.formatXp(amount);
     }
 
     @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (!command.getName().equalsIgnoreCase("leveladmin")) return Collections.emptyList();
-        if (args.length == 1) return partial(args[0], Arrays.asList("set", "addxp", "setxp", "removexp", "info"));
-        if (args.length == 2 && Arrays.asList("set", "addxp", "setxp", "removexp", "info")
-                .contains(args[0].toLowerCase(Locale.ROOT))) {
+    public List<String> tabComplete(CommandSender sender, String[] args) {
+        if (args.length == 1) {
+            List<String> actions = List.of("set", "addxp", "setxp", "removexp", "info").stream()
+                    .filter(action -> hasActionPermission(sender, action)).toList();
+            return partial(args[0], actions);
+        }
+        if (args.length == 2 && List.of("set", "addxp", "setxp", "removexp", "info")
+                .contains(args[0].toLowerCase(Locale.ROOT)) && hasActionPermission(sender, args[0].toLowerCase(Locale.ROOT))) {
             List<String> names = new ArrayList<>();
             for (Player player : Bukkit.getOnlinePlayers()) names.add(player.getName());
             return partial(args[1], names);
         }
-        return Collections.emptyList();
+        return List.of();
+    }
+
+    private boolean hasActionPermission(CommandSender sender, String action) {
+        return sender.hasPermission("pacifica.level.admin") || sender.hasPermission("pacifica.level." + action);
     }
 
     private List<String> partial(String input, List<String> values) {

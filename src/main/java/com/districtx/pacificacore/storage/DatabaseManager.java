@@ -5,6 +5,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -76,9 +78,36 @@ public final class DatabaseManager implements AutoCloseable {
                         + "uuid TEXT PRIMARY KEY, prestige INTEGER NOT NULL DEFAULT 0)");
                 statement.executeUpdate("CREATE TABLE IF NOT EXISTS player_level_pending_rewards ("
                         + "uuid TEXT PRIMARY KEY, previous_level INTEGER NOT NULL, new_level INTEGER NOT NULL)");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS npc_links ("
+                        + "feature_id TEXT PRIMARY KEY, npc_id TEXT NOT NULL)");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS spawn_shop_npc_links ("
+                        + "npc_id TEXT PRIMARY KEY, shop_id TEXT NOT NULL)");
+                statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_spawn_shop_npc_links_shop "
+                        + "ON spawn_shop_npc_links(shop_id)");
+                migrateNpcLinks(connection, statement);
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS spawn_shop_items ("
+                        + "item_id TEXT PRIMARY KEY, shop_id TEXT NOT NULL, category TEXT, slot INTEGER NOT NULL, "
+                        + "item_stack TEXT NOT NULL, unit_price REAL NOT NULL)");
+                statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_spawn_shop_items "
+                        + "ON spawn_shop_items(shop_id, category, slot)");
             }
             return null;
         });
+    }
+
+    private void migrateNpcLinks(Connection connection, Statement statement) throws SQLException {
+        try (PreparedStatement tableCheck = connection.prepareStatement(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'spawn_npcs'");
+             ResultSet result = tableCheck.executeQuery()) {
+            if (!result.next()) return;
+        }
+        statement.executeUpdate("INSERT OR IGNORE INTO spawn_shop_npc_links (npc_id, shop_id) "
+                + "SELECT npc_id, lower(linked_shop) FROM spawn_npcs "
+                + "WHERE linked_shop IS NOT NULL AND trim(linked_shop) <> ''");
+        statement.executeUpdate("INSERT OR IGNORE INTO npc_links (feature_id, npc_id) "
+                + "SELECT 'spawnshop:' || lower(linked_shop), min(lower(npc_id)) FROM spawn_npcs "
+                + "WHERE linked_shop IS NOT NULL AND trim(linked_shop) <> '' GROUP BY lower(linked_shop)");
+        statement.executeUpdate("DROP TABLE spawn_npcs");
     }
 
     private void createItemPriceSchema() throws SQLException {

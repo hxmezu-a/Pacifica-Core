@@ -14,8 +14,8 @@ leveling:
   messages:
     experience:
       enabled: true
-      chat: true
-      action-bar: false
+      chat: false
+      action-bar: true
       sound:
         enabled: false
         sound: ENTITY_PLAYER_LEVELUP
@@ -26,8 +26,8 @@ leveling:
         toast: true
         chat-announcement: false
         chat-message: '&e&l+ &a&l%xp%'
-        title: '&a&lExperience Gained'
-        description: '&7You gained Player Level experience.'
+        title: '&a&lXP Reward'
+        description: '&7Pacifica Player Level experience gained.'
         icon: EXPERIENCE_BOTTLE
         frame: TASK
         background: ''
@@ -43,7 +43,7 @@ leveling:
       added: '&aAdded %amount% Pacifica XP to %player%.'
       set-experience: '&aSet %player%''s Pacifica XP to %amount%.'
       removed: '&aRemoved %amount% Pacifica XP from %player%.'
-      usage: '&e/leveladmin set <player> <level>|addxp <player> <amount>|setxp <player> <amount>|removexp <player> <amount>|info <player>'
+      usage: '&e/admin level set <player> <level>|addxp <player> <amount>|setxp <player> <amount>|removexp <player> <amount>|info <player>'
       self: |-
         &6&lPlayer Level
         &7Level: &e%level%
@@ -59,6 +59,9 @@ leveling:
   debug:
     xp: false
     advancements: false
+debug:
+  level-display: false
+  advancement-notification: false
 daily-xp:
   enabled: true
   unlock-level: 10

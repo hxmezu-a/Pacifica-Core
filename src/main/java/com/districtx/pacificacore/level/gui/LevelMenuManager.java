@@ -9,6 +9,7 @@ import com.districtx.pacificacore.api.LevelRewardService;
 import com.districtx.pacificacore.api.PlayerLevelService;
 import com.districtx.pacificacore.api.PrestigeService;
 import com.districtx.pacificacore.api.RankExperienceBonusService;
+import com.districtx.pacificacore.level.ExperienceFormatter;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -21,7 +22,6 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -195,8 +195,8 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
         String messageKey = result.isSuccessful() ? "success" : result.getFailureReason();
         String message = plugin.getLevelConfig().getString("messages.daily-xp." + messageKey,
                 result.isSuccessful() ? "&aPurchased %amount% XP for $%price%." : "&cDaily XP purchase failed.");
-        player.sendMessage(color(apply(message, Map.of("amount", format(result.getExperience()),
-                "price", format(result.getPrice()), "cooldown", formatDuration(result.getCooldown()),
+        player.sendMessage(color(apply(message, Map.of("amount", ExperienceFormatter.formatXp(result.getExperience()),
+                "price", ExperienceFormatter.formatPrice(result.getPrice()), "cooldown", formatDuration(result.getCooldown()),
                 "currency_symbol", plugin.getLevelConfig().getString("currency.money-symbol", "$")))));
         refresh(player);
     }
@@ -220,7 +220,7 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
         values.put("color_level", levelColor(displayedLevel));
         values.put("page", String.valueOf((displayedLevel - 1) / 20 + 1));
         values.put("daily_xp", format(dailyExperience.getExperienceAmount(playerId)));
-        values.put("price_xp", format(dailyExperience.getPrice(playerId)));
+        values.put("price_xp", ExperienceFormatter.formatPrice(dailyExperience.getPrice(playerId)));
         String name = apply(text("gui.progression.level-name", "&8[%color_level%Level %level%&8]"), values);
         List<String> lore = new ArrayList<>();
         if (state.equals("current")) lore.add(text("gui.progression.current-prefix", "&6&lCURRENT LEVEL"));
@@ -240,7 +240,7 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
         else state = "available";
         Map<String, String> values = new java.util.HashMap<>();
         values.put("daily_xp", format(dailyExperience.getExperienceAmount(playerId)));
-        values.put("price_xp", format(dailyExperience.getPrice(playerId)));
+        values.put("price_xp", ExperienceFormatter.formatPrice(dailyExperience.getPrice(playerId)));
         values.put("cooldown", formatDuration(dailyExperience.getRemainingCooldown(playerId)));
         values.put("currency_symbol", plugin.getLevelConfig().getString("currency.money-symbol", "$"));
         values.put("unlock_level", String.valueOf(plugin.getLevelConfig().getInt("daily-xp.unlock-level", 10)));
@@ -365,9 +365,7 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
     }
 
     private String format(double amount) {
-        if (Double.isInfinite(amount)) return "∞";
-        if (Double.isNaN(amount)) return "0";
-        return BigDecimal.valueOf(amount).stripTrailingZeros().toPlainString();
+        return ExperienceFormatter.formatXp(amount);
     }
 
     private String formatDuration(Duration duration) {

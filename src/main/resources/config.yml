@@ -14,7 +14,35 @@ messages:
   reset: '&aReset %player%''s %currency% balance.'
   set: '&aSet %player%''s %currency% balance to %amount%.'
   removed: '&aRemoved %amount% %currency% from %player%.'
-  usage: '&e/core reload|dgive|bgive|reset|get|set ...'
+  usage: '&e/admin core reload | /admin diamonds give|remove|set|reset|reload ... | /admin balance give|remove|set|reset ...'
+spawn-shop:
+  messages:
+    shop-locked: '&cYou need Pacifica Level %required-level% to access this shop.'
+    inventory-full: '&cYou do not have enough inventory space.'
+    insufficient-funds: '&cYou do not have enough money.'
+    purchase-success: '&aPurchased x%quantity% for $%price%.'
+    purchase-failed: '&cThe purchase could not be completed.'
+  shops:
+    weapon:
+      enabled: true
+      title: '&c&lWeapon Shop'
+      required-level: 0
+    armor:
+      enabled: true
+      title: '&e&lArmor Shop'
+      required-level: 10
+    food:
+      enabled: true
+      title: '&e&lFood Shop'
+      required-level: 0
+    vehicle:
+      enabled: true
+      title: '&e&lVehicle Shop'
+      required-level: 25
+    medic:
+      enabled: true
+      title: '&d&lMedic Shop'
+      required-level: 50
 black-market:
   durations-hours: [8, 16, 24, 48]
   enabled: true

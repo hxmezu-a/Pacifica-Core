@@ -1,6 +1,7 @@
 package com.districtx.pacificacore.market;
 
 import com.districtx.pacificacore.api.EconomyService;
+import com.districtx.pacificacore.command.AdminSubCommand;
 import com.districtx.pacificacore.storage.BlackMarketRepository;
 import com.districtx.pacificacore.storage.DatabaseManager;
 import org.bukkit.Bukkit;
@@ -33,10 +34,11 @@ import java.util.Map;
 import java.util.OptionalInt;
 import java.util.UUID;
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-public final class BlackMarketManager implements CommandExecutor, Listener, AutoCloseable {
+public final class BlackMarketManager implements CommandExecutor, Listener, AutoCloseable, AdminSubCommand {
     private final JavaPlugin plugin;
-    private final BlackMarketService service;
+    private final BlackMarketServiceImpl service;
     private final EconomyService economy;
     private final org.bukkit.NamespacedKey offerKey;
     private final org.bukkit.NamespacedKey categoryKey;
@@ -45,6 +47,7 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
     private final BlackMarketOfferSlotPermissionService offerSlotPermissionService =
             new DefaultBlackMarketOfferSlotPermissionService(offerSlotRegistry);
     private final Map<UUID, BrowseState> browseStates = new HashMap<>();
+    private final AtomicBoolean cleanupRunning = new AtomicBoolean();
     private int cleanupTask = -1;
 
     public BlackMarketManager(JavaPlugin plugin, DatabaseManager database, EconomyService economy) {
@@ -54,16 +57,62 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
         this.categoryKey = new org.bukkit.NamespacedKey(plugin, "blackmarket_category");
         this.categoryDetector = new BlackMarketCategoryDetector(plugin);
         this.service = new BlackMarketServiceImpl(plugin, new BlackMarketRepository(plugin, database), economy);
-        cleanupTask = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, service::cleanupExpiredOffers, 20L * 60L, 20L * 60L);
+        cleanupTask = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, this::scheduleExpiredOfferCleanup,
+                20L * 60L, 20L * 60L);
     }
 
     public BlackMarketService getService() { return service; }
 
+    @Override public String getName() { return "bm"; }
+    @Override public List<String> getAliases() { return List.of("blackmarket"); }
+    @Override public String getPermission() { return "pacifica.admin.bm"; }
+
+    @Override
+    public boolean canAccess(CommandSender sender) {
+        return AdminSubCommand.super.canAccess(sender) || sender.hasPermission("blackmarket.admin.category");
+    }
+
+    @Override
+    public boolean execute(CommandSender sender, String[] args) {
+        return categoryCommand(sender, args);
+    }
+
+    @Override
+    public List<String> tabComplete(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("blackmarket.admin.category")) return List.of();
+        if (args.length == 1) return matches(List.of("category"), args[0]);
+        if (args.length == 2 && args[0].equalsIgnoreCase("category")) return matches(List.of("add"), args[1]);
+        if (args.length == 3 && args[0].equalsIgnoreCase("category")
+                && args[1].equalsIgnoreCase("add")) {
+            return matches(List.of("weapon", "armor", "playerheads", "rares", "cheatcode", "cosmetics"), args[2]);
+        }
+        return List.of();
+    }
+
     public int cleanupExpiredOffers() { return service.cleanupExpiredOffers(); }
+
+    public void scheduleExpiredOfferCleanup() {
+        if (!cleanupRunning.compareAndSet(false, true)) return;
+        double refundPercent = plugin.getConfig().getDouble("black-market.auction.losing-bid-refund-percent", 70.0D);
+        try {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                try {
+                    service.cleanupExpiredOffers(refundPercent);
+                } catch (RuntimeException exception) {
+                    plugin.getLogger().severe("Could not clean up expired Black Market offers: "
+                            + exception.getMessage());
+                } finally {
+                    cleanupRunning.set(false);
+                }
+            });
+        } catch (RuntimeException exception) {
+            cleanupRunning.set(false);
+            throw exception;
+        }
+    }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (command.getName().equalsIgnoreCase("bmadmin")) return categoryCommand(sender, args);
         if (!(sender instanceof Player)) {
             sender.sendMessage(ChatColor.RED + "Only players can use the Black Market.");
             return true;
@@ -82,7 +131,7 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
             return true;
         }
         if (args.length != 3 || !args[0].equalsIgnoreCase("category") || !args[1].equalsIgnoreCase("add")) {
-            player.sendMessage(ChatColor.RED + "Usage: /bmadmin category add <weapon|armor|playerheads|rares|cheatcode|cosmetics>");
+            player.sendMessage(ChatColor.RED + "Usage: /admin bm category add <weapon|armor|playerheads|rares|cheatcode|cosmetics>");
             return true;
         }
         BlackMarketCategory category;
@@ -111,6 +160,11 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
         held.setItemMeta(meta);
         player.sendMessage(ChatColor.GREEN + "Item category set to " + category.name() + ".");
         return true;
+    }
+
+    private List<String> matches(List<String> values, String prefix) {
+        String normalized = prefix.toLowerCase(java.util.Locale.ROOT);
+        return values.stream().filter(value -> value.startsWith(normalized)).toList();
     }
 
     @EventHandler

@@ -313,6 +313,11 @@ public final class BlackMarketServiceImpl implements BlackMarketService {
 
     @Override
     public synchronized int cleanupExpiredOffers() {
+        return cleanupExpiredOffers(plugin.getConfig().getDouble(
+                "black-market.auction.losing-bid-refund-percent", 70.0D));
+    }
+
+    public synchronized int cleanupExpiredOffers(double losingBidRefundPercent) {
         long now = System.currentTimeMillis();
         List<BlackMarketOffer> expiredBuys = repository.expireBuyOffers(now);
         for (BlackMarketOffer offer : expiredBuys) {
@@ -321,30 +326,33 @@ public final class BlackMarketServiceImpl implements BlackMarketService {
             }
         }
         List<BlackMarketOffer> expired = repository.expireAuctions(now);
-        for (BlackMarketOffer offer : expired) settleAuction(offer);
+        for (BlackMarketOffer offer : expired) settleAuction(offer, losingBidRefundPercent);
         return expiredBuys.size() + expired.size() + repository.expire(now);
     }
 
-    private void settleAuction(BlackMarketOffer offer) {
+    private void settleAuction(BlackMarketOffer offer, double losingBidRefundPercent) {
         if (offer.getHighestBidder() != null) {
             if (!economy.deposit(offer.getSeller(), offer.getReservedFunds())) {
                 plugin.getLogger().severe("Could not pay auction seller " + offer.getSeller() + ".");
             }
-            BigDecimal refund = offer.getReservedFunds().multiply(BigDecimal.valueOf(
-                    plugin.getConfig().getDouble("black-market.auction.losing-bid-refund-percent", 70.0D)))
+            BigDecimal refund = offer.getReservedFunds().multiply(BigDecimal.valueOf(losingBidRefundPercent))
                     .divide(BigDecimal.valueOf(100));
             for (BlackMarketBid bid : repository.findBids(offer.getId())) {
                 if (!bid.getBidder().equals(offer.getHighestBidder()) && !bid.isRefunded()
                         && repository.markBidRefunded(bid.getId())) {
-                    refundBid(bid.getBidder(), bid.getAmount());
+                    refundBid(bid.getBidder(), bid.getAmount(), losingBidRefundPercent);
                 }
             }
         }
     }
 
     private void refundBid(UUID bidder, BigDecimal amount) {
-        BigDecimal refund = amount.multiply(BigDecimal.valueOf(
-                plugin.getConfig().getDouble("black-market.auction.losing-bid-refund-percent", 70.0D)))
+        refundBid(bidder, amount, plugin.getConfig().getDouble(
+                "black-market.auction.losing-bid-refund-percent", 70.0D));
+    }
+
+    private void refundBid(UUID bidder, BigDecimal amount, double losingBidRefundPercent) {
+        BigDecimal refund = amount.multiply(BigDecimal.valueOf(losingBidRefundPercent))
                 .divide(BigDecimal.valueOf(100));
         if (!economy.deposit(bidder, refund)) {
             plugin.getLogger().severe("Could not refund Black Market bid for " + bidder + ".");

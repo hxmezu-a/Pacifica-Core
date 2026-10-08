@@ -11,6 +11,7 @@ public final class PacificaCoreAPIImpl implements PacificaCoreAPI {
     private final RankExperienceBonusService rankBonuses;
     private final LevelMenuService levelMenus;
     private final AdvancementNotificationService advancementNotifications;
+    private final NpcLinkService npcLinkService;
 
     public PacificaCoreAPIImpl(DiamondCurrencyService diamonds, EconomyService economy,
                                TransactionService transactions, PlayerLevelService playerLevels,
@@ -27,6 +28,17 @@ public final class PacificaCoreAPIImpl implements PacificaCoreAPI {
                                PrestigeService prestige, RankExperienceBonusService rankBonuses,
                                LevelMenuService levelMenus,
                                AdvancementNotificationService advancementNotifications) {
+        this(diamonds, economy, transactions, playerLevels, levelRewards, dailyExperience, prestige, rankBonuses,
+                levelMenus, advancementNotifications, null);
+    }
+
+    public PacificaCoreAPIImpl(DiamondCurrencyService diamonds, EconomyService economy,
+                               TransactionService transactions, PlayerLevelService playerLevels,
+                               LevelRewardService levelRewards, DailyExperienceService dailyExperience,
+                               PrestigeService prestige, RankExperienceBonusService rankBonuses,
+                               LevelMenuService levelMenus,
+                               AdvancementNotificationService advancementNotifications,
+                               NpcLinkService npcLinkService) {
         this.diamonds = diamonds;
         this.economy = economy;
         this.transactions = transactions;
@@ -37,6 +49,7 @@ public final class PacificaCoreAPIImpl implements PacificaCoreAPI {
         this.rankBonuses = rankBonuses;
         this.levelMenus = levelMenus;
         this.advancementNotifications = advancementNotifications;
+        this.npcLinkService = npcLinkService;
     }
 
     @Override
@@ -69,4 +82,5 @@ public final class PacificaCoreAPIImpl implements PacificaCoreAPI {
     @Override public RankExperienceBonusService getRankExperienceBonusService() { return rankBonuses; }
     @Override public LevelMenuService getLevelMenuService() { return levelMenus; }
     @Override public AdvancementNotificationService getAdvancementNotificationService() { return advancementNotifications; }
+    @Override public NpcLinkService getNpcLinkService() { return npcLinkService; }
 }

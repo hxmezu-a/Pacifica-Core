@@ -10,6 +10,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 
 import java.util.HashSet;
@@ -43,6 +44,7 @@ public final class PlayerLevelListener implements Listener {
         Player victim = event.getEntity();
         UUID victimId = victim.getUniqueId();
         if (!rewardedDeaths.add(victimId)) return;
+        playerLevels.deferNotificationsUntilRespawn(victimId);
         boolean taggedAtDeath = combatTag.isInCombat(victim);
         Player killer = victim.getKiller();
         if (killer != null && !killer.getUniqueId().equals(victimId)) {
@@ -66,6 +68,15 @@ public final class PlayerLevelListener implements Listener {
 
     @EventHandler
     public void onPlayerRespawn(PlayerRespawnEvent event) {
-        rewardedDeaths.remove(event.getPlayer().getUniqueId());
+        Player player = event.getPlayer();
+        rewardedDeaths.remove(player.getUniqueId());
+        plugin.getServer().getScheduler().runTask(plugin, () -> playerLevels.refreshPlayer(player));
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        UUID playerId = event.getPlayer().getUniqueId();
+        rewardedDeaths.remove(playerId);
+        playerLevels.cleanupPendingNotifications(playerId);
     }
 }

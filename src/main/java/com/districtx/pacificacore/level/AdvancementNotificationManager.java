@@ -12,14 +12,23 @@ import org.bukkit.advancement.Advancement;
 import org.bukkit.advancement.AdvancementProgress;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.HashMap;
 
 public final class AdvancementNotificationManager implements AdvancementNotificationService, Listener {
     private static final String CRITERION = "experience_gain";
@@ -27,6 +36,8 @@ public final class AdvancementNotificationManager implements AdvancementNotifica
 
     private final PacificaCore plugin;
     private final Set<UUID> notifiedTransactions = new LinkedHashSet<>();
+    private final Set<UUID> deferredNotificationPlayers = new HashSet<>();
+    private final Map<UUID, List<ExperienceGainResult>> pendingNotifications = new HashMap<>();
     private Advancement advancement;
     private NamespacedKey advancementKey;
 
@@ -46,9 +57,7 @@ public final class AdvancementNotificationManager implements AdvancementNotifica
 
     @Override
     public boolean isEnabled() {
-        return plugin.getLevelConfig().getBoolean("leveling.messages.experience.advancement.enabled", true)
-                && (isToastEnabled() || plugin.getLevelConfig().getBoolean(
-                "leveling.messages.experience.advancement.chat-announcement", false));
+        return isToastEnabled();
     }
 
     @EventHandler
@@ -57,6 +66,22 @@ public final class AdvancementNotificationManager implements AdvancementNotifica
         if (result == null || result.getPlayerId() == null) return;
         Player player = Bukkit.getPlayer(result.getPlayerId());
         if (player != null) notifyExperienceGain(player, result);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        deferredNotificationPlayers.add(event.getEntity().getUniqueId());
+    }
+
+    @EventHandler
+    public void onPlayerRespawn(PlayerRespawnEvent event) {
+        Player player = event.getPlayer();
+        Bukkit.getScheduler().runTask(plugin, () -> refresh(player));
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        cleanup(event.getPlayer());
     }
 
     @Override
@@ -69,6 +94,10 @@ public final class AdvancementNotificationManager implements AdvancementNotifica
                 || !player.getUniqueId().equals(result.getPlayerId())
                 || result.getTransactionId() == null || result.getExperienceAdded() <= 0.0
                 || !isEnabled()) return;
+        if (player.isDead() || deferredNotificationPlayers.contains(player.getUniqueId())) {
+            pendingNotifications.computeIfAbsent(player.getUniqueId(), ignored -> new ArrayList<>()).add(result);
+            return;
+        }
         UUID transactionId = result.getTransactionId();
         if (!notifiedTransactions.add(transactionId)) return;
         if (notifiedTransactions.size() > MAX_REMEMBERED_TRANSACTIONS) {
@@ -77,22 +106,30 @@ public final class AdvancementNotificationManager implements AdvancementNotifica
             iterator.remove();
         }
 
-        if (plugin.getLevelConfig().getBoolean(
-                "leveling.messages.experience.advancement.chat-announcement", false)) {
-            String message = plugin.getLevelConfig().getString(
-                    "leveling.messages.experience.advancement.chat-message", "&e&l+ &a&l%xp%");
-            message = message.replace("%xp%", ExperienceFormatter.formatReward(result.getExperienceAdded()));
-            message = ExperienceFormatter.applyPlaceholders(player, message);
-            player.sendMessage(org.bukkit.ChatColor.translateAlternateColorCodes('&', message));
-        }
-
         boolean toastShown = isToastEnabled() && showToast(player);
-        if (plugin.getLevelConfig().getBoolean("leveling.debug.advancements", false)) {
+        if (plugin.getLevelConfig().getBoolean("leveling.debug.advancements", false)
+                || plugin.getLevelConfig().getBoolean("debug.advancement-notification", false)) {
             plugin.getLogger().info("XP transaction " + transactionId + ": player=" + result.getPlayerId()
                     + " source=" + result.getSource() + " amount="
                     + ExperienceFormatter.formatReward(result.getExperienceAdded())
                     + " advancement=" + (toastShown ? "shown" : isToastEnabled() ? "failed" : "disabled"));
         }
+    }
+
+    @Override
+    public void refresh(Player player) {
+        if (player == null || !player.isOnline()) return;
+        deferredNotificationPlayers.remove(player.getUniqueId());
+        List<ExperienceGainResult> pending = pendingNotifications.remove(player.getUniqueId());
+        if (pending == null) return;
+        for (ExperienceGainResult result : pending) notifyExperienceGain(player, result);
+    }
+
+    @Override
+    public void cleanup(Player player) {
+        if (player == null) return;
+        pendingNotifications.remove(player.getUniqueId());
+        deferredNotificationPlayers.remove(player.getUniqueId());
     }
 
     private boolean isToastEnabled() {
@@ -106,12 +143,7 @@ public final class AdvancementNotificationManager implements AdvancementNotifica
         AdvancementProgress progress = player.getAdvancementProgress(advancement);
         for (String awarded : progress.getAwardedCriteria()) progress.revokeCriteria(awarded);
         if (!progress.awardCriteria(CRITERION)) return false;
-        Advancement toastAdvancement = advancement;
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (!player.isOnline()) return;
-            AdvancementProgress current = player.getAdvancementProgress(toastAdvancement);
-            current.revokeCriteria(CRITERION);
-        }, 1L);
+        progress.revokeCriteria(CRITERION);
         return true;
     }
 
@@ -119,7 +151,7 @@ public final class AdvancementNotificationManager implements AdvancementNotifica
         String definition = createAdvancementJson();
         String fingerprint = UUID.nameUUIDFromBytes(definition.getBytes(StandardCharsets.UTF_8))
                 .toString().replace("-", "");
-        NamespacedKey key = new NamespacedKey(plugin, "experience_gain_" + fingerprint);
+        NamespacedKey key = new NamespacedKey(plugin, "experience_reward_" + fingerprint);
         if (key.equals(advancementKey) && advancement != null) return;
 
         Advancement loaded = Bukkit.getAdvancement(key);

@@ -18,24 +18,59 @@ commands:
     description: Show a server balance
     aliases: [balance]
     permission: pacifica.core.command.balance
-  core:
-    description: Manage Pacifica-Core currency
-    aliases: [dmdadmin]
-    permission: pacifica.core.admin.reload
+  admin:
+    description: Manage Pacifica-Core administrative features
   bm:
     description: Open the Black Market
     aliases: [blackmarket]
     permission: pacifica.core.command.blackmarket
-  bmadmin:
-    description: Manage Black Market item categories
-    permission: blackmarket.admin.category
   level:
     description: Open the Pacifica Leveling menu
     aliases: [levels, playerlevel]
     permission: pacifica.level.command
-  leveladmin:
-    description: Manage Pacifica Player Levels and experience
+  spawnshop:
+    description: Open the Spawn Shop
 permissions:
+  pacifica.admin:
+    default: op
+    children:
+      pacifica.admin.bm: true
+      pacifica.admin.sshop: true
+      pacifica.admin.core: true
+      pacifica.admin.diamonds: true
+      pacifica.admin.balance: true
+      pacifica.admin.level: true
+  pacifica.admin.bm:
+    default: false
+    children:
+      blackmarket.admin.category: true
+  pacifica.admin.sshop:
+    default: false
+    children:
+      pacifica.spawnshop.admin: true
+  pacifica.admin.core:
+    default: false
+    children:
+      pacifica.core.admin.reload: true
+  pacifica.admin.diamonds:
+    default: false
+    children:
+      pacifica.core.admin.reload: true
+      pacifica.core.admin.dgive: true
+      pacifica.core.admin.get: true
+      pacifica.core.admin.set: true
+      pacifica.core.admin.reset: true
+  pacifica.admin.balance:
+    default: false
+    children:
+      pacifica.core.admin.bgive: true
+      pacifica.core.admin.get: true
+      pacifica.core.admin.set: true
+      pacifica.core.admin.reset: true
+  pacifica.admin.level:
+    default: false
+    children:
+      pacifica.level.admin: true
   pacifica.core.command.diamond:
     default: true
   pacifica.core.command.balance:
@@ -77,4 +112,8 @@ permissions:
   pacifica.level.removexp:
     default: op
   pacifica.level.info:
+    default: op
+  pacifica.spawnshop:
+    default: op
+  pacifica.spawnshop.admin:
     default: op
