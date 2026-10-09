@@ -43,7 +43,7 @@ leveling:
       added: '&aAdded %amount% Pacifica XP to %player%.'
       set-experience: '&aSet %player%''s Pacifica XP to %amount%.'
       removed: '&aRemoved %amount% Pacifica XP from %player%.'
-      usage: '&e/admin level set <player> <level>|addxp <player> <amount>|setxp <player> <amount>|removexp <player> <amount>|info <player>'
+      usage: '&e/adminpc level set <player> <level>|addxp <player> <amount>|setxp <player> <amount>|removexp <player> <amount>|info <player>'
       self: |-
         &6&lPlayer Level
         &7Level: &e%level%

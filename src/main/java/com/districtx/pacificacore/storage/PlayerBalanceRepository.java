@@ -57,7 +57,7 @@ public final class PlayerBalanceRepository {
     public boolean transfer(UUID from, UUID to, BigDecimal diamondAmount, BigDecimal balanceAmount) {
         if (from == null || to == null) return false;
         try {
-            return database.player(connection -> {
+            return database.currency(connection -> {
                 BigDecimal fromDiamonds = read(connection, DIAMOND_TABLE, from);
                 BigDecimal fromBalance = read(connection, ECONOMY_TABLE, from);
                 if (fromDiamonds.compareTo(diamondAmount) < 0 || fromBalance.compareTo(balanceAmount) < 0) {
@@ -81,7 +81,7 @@ public final class PlayerBalanceRepository {
     public boolean setBoth(UUID player, BigDecimal diamondAmount, BigDecimal balanceAmount) {
         if (player == null) return false;
         try {
-            return database.player(connection -> {
+            return database.currency(connection -> {
                 write(connection, DIAMOND_TABLE, player, diamondAmount);
                 write(connection, ECONOMY_TABLE, player, balanceAmount);
                 return true;
@@ -94,7 +94,7 @@ public final class PlayerBalanceRepository {
 
     private Map<UUID, BigDecimal> load(String table) {
         try {
-            return database.player(connection -> {
+            return database.currency(connection -> {
                 Map<UUID, BigDecimal> result = new HashMap<>();
                 try (PreparedStatement statement = connection.prepareStatement(
                         "SELECT uuid, balance FROM " + table);
@@ -120,7 +120,7 @@ public final class PlayerBalanceRepository {
     private BigDecimal get(String table, UUID player) {
         if (player == null) return BigDecimal.ZERO;
         try {
-            return database.player(connection -> read(connection, table, player));
+            return database.currency(connection -> read(connection, table, player));
         } catch (SQLException | RuntimeException exception) {
             logFailure("read balance", exception);
             return BigDecimal.ZERO;
@@ -130,7 +130,7 @@ public final class PlayerBalanceRepository {
     private boolean set(String table, UUID player, BigDecimal amount) {
         if (player == null || amount == null) return false;
         try {
-            return database.player(connection -> {
+            return database.currency(connection -> {
                 write(connection, table, player, amount);
                 return true;
             });
@@ -143,7 +143,7 @@ public final class PlayerBalanceRepository {
     private boolean importIfAbsent(String table, UUID player, BigDecimal amount) {
         if (player == null || amount == null) return false;
         try {
-            return database.player(connection -> {
+            return database.currency(connection -> {
                 try (PreparedStatement statement = connection.prepareStatement(
                         "SELECT 1 FROM " + table + " WHERE uuid = ?")) {
                     statement.setString(1, player.toString());

@@ -56,6 +56,7 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -66,6 +67,8 @@ import java.math.BigDecimal;
 import java.text.NumberFormat;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 import java.util.List;
 import java.util.Locale;
@@ -78,6 +81,9 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
     private FileConfigurationBridge messages;
     private FileConfiguration levelConfig;
     private FileConfiguration levelRewardsConfig;
+    private FileConfiguration currencyConfig;
+    private FileConfiguration spawnShopConfig;
+    private FileConfiguration blackMarketConfig;
     private BlackMarketManager blackMarket;
     private PlayerLevelManager playerLevels;
     private LevelRewardManager levelRewards;
@@ -99,8 +105,15 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
-        saveResourceIfMissing("level.yml");
-        saveResourceIfMissing("level-rewards.yml");
+        try {
+            prepareLevelConfigurationFiles();
+            prepareFeatureConfigurations();
+            prepareLegacyCurrencyFiles();
+        } catch (IOException exception) {
+            getLogger().severe("Could not prepare Pacifica-Core feature files: " + exception.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         reloadLevelConfigurations();
         messages = new FileConfigurationBridge(this);
         database = new DatabaseManager(this);
@@ -173,8 +186,8 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         AdminCommand adminCommand = new AdminCommand(List.of(blackMarket, spawnShopAdminCommand,
                 new CoreAdminCommand(this), new CurrencyAdminSubCommand(this, "diamonds", true),
                 new CurrencyAdminSubCommand(this, "balance", false), levelCommand));
-        getCommand("admin").setExecutor(adminCommand);
-        getCommand("admin").setTabCompleter(adminCommand);
+        getCommand("adminpc").setExecutor(adminCommand);
+        getCommand("adminpc").setTabCompleter(adminCommand);
         blackMarket.scheduleExpiredOfferCleanup();
         PacificaCombatTagIntegration combatTagIntegration = new PacificaCombatTagIntegration(this);
         getServer().getPluginManager().registerEvents(new PlayerLevelListener(this, playerLevels, combatTagIntegration), this);
@@ -236,7 +249,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
     private boolean tell(CommandSender sender, String key) { return send(sender, key); }
 
     private boolean send(CommandSender sender, String key, String... values) {
-        String message = messages.get(key);
+        String message = messages.get(key, key);
         for (int i = 0; i + 1 < values.length; i += 2) message = message.replace("%" + values[i] + "%", values[i + 1]);
         sender.sendMessage(ChatColor.translateAlternateColorCodes('&', message));
         return true;
@@ -260,15 +273,17 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
 
     public void reloadAdministrativeConfiguration() {
         reloadConfig();
+        reloadFeatureConfigurations();
         messages.reload();
         reloadPlayerLevelConfiguration();
     }
 
     private void migrateYamlCurrency() {
-        migrateYamlFile(new File(getDataFolder(), "balance.yml"), new File(getDataFolder(), ".balance-yaml-migrated"));
-        migrateYamlFile(new File(getDataFolder(), "balances.yml"), new File(getDataFolder(), ".balances-yaml-migrated"));
+        File currencyFolder = new File(getDataFolder(), "Currency");
+        migrateYamlFile(new File(currencyFolder, "balance.yml"), new File(currencyFolder, ".balance-yaml-migrated"));
+        migrateYamlFile(new File(currencyFolder, "balances.yml"), new File(currencyFolder, ".balances-yaml-migrated"));
         File legacy = new File(getDataFolder().getParentFile(), "Pacifica-Currency/balances.yml");
-        migrateYamlFile(legacy, new File(getDataFolder(), ".legacy-diamond-migrated"));
+        migrateYamlFile(legacy, new File(currencyFolder, ".legacy-diamond-migrated"));
     }
 
     private void migrateYamlFile(File file, File marker) {
@@ -328,16 +343,180 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         return levelRewardsConfig;
     }
 
+    public FileConfiguration getCurrencyConfig() {
+        return currencyConfig;
+    }
+
+    public FileConfiguration getSpawnShopConfig() {
+        return spawnShopConfig;
+    }
+
+    public FileConfiguration getBlackMarketConfig() {
+        return blackMarketConfig;
+    }
+
+    public String getMessage(String key) {
+        return messages.get(key, key);
+    }
+
+    public String getMessage(String key, String fallback) {
+        return messages.get(key, fallback);
+    }
+
     private void reloadLevelConfigurations() {
-        File levelFile = new File(getDataFolder(), "level.yml");
-        File rewardsFile = new File(getDataFolder(), "level-rewards.yml");
+        File levelFolder = new File(getDataFolder(), "level");
+        File levelFile = new File(levelFolder, "level.yml");
+        File rewardsFile = new File(levelFolder, "level-rewards.yml");
         levelConfig = YamlConfiguration.loadConfiguration(levelFile);
         levelRewardsConfig = YamlConfiguration.loadConfiguration(rewardsFile);
     }
 
-    private void saveResourceIfMissing(String resource) {
-        File file = new File(getDataFolder(), resource);
+    private void prepareLevelConfigurationFiles() throws IOException {
+        File levelFolder = new File(getDataFolder(), "level");
+        if (!levelFolder.exists() && !levelFolder.mkdirs()) throw new IOException("Could not create level directory.");
+        relocateLegacyYaml(new File(getDataFolder(), "level.yml"), new File(levelFolder, "level.yml"));
+        relocateLegacyYaml(new File(getDataFolder(), "level-rewards.yml"), new File(levelFolder, "level-rewards.yml"));
+        saveResourceIfMissing("level/level.yml", new File(levelFolder, "level.yml"));
+        saveResourceIfMissing("level/level-rewards.yml", new File(levelFolder, "level-rewards.yml"));
+        File levelFile = new File(levelFolder, "level.yml");
+        FileConfiguration levelConfiguration = YamlConfiguration.loadConfiguration(levelFile);
+        String levelUsage = levelConfiguration.getString("leveling.messages.commands.usage");
+        if (levelUsage != null && levelUsage.contains("/admin ")) {
+            levelConfiguration.set("leveling.messages.commands.usage", levelUsage.replace("/admin ", "/adminpc "));
+            levelConfiguration.save(levelFile);
+        }
+    }
+
+    private void prepareFeatureConfigurations() throws IOException {
+        FileConfiguration root = getConfig();
+        File currencyFile = new File(new File(getDataFolder(), "Currency"), "config.yml");
+        File currencyMessagesFile = new File(new File(getDataFolder(), "Currency"), "messages.yml");
+        File spawnShopFile = new File(new File(getDataFolder(), "SpawnShop"), "config.yml");
+        File blackMarketFile = new File(new File(getDataFolder(), "BlackMarket"), "config.yml");
+        boolean currencyExisted = currencyFile.isFile();
+        boolean currencyMessagesExisted = currencyMessagesFile.isFile();
+        boolean spawnShopExisted = spawnShopFile.isFile();
+        boolean blackMarketExisted = blackMarketFile.isFile();
+        boolean hasLegacySettings = root.contains("storage-file") || root.contains("messages")
+                || root.contains("spawn-shop") || root.contains("black-market");
+        if (hasLegacySettings) {
+            backupFile(new File(getDataFolder(), "config.yml"),
+                    new File(getDataFolder(), "Currency/.migration-backups/config.yml.bak"));
+        }
+
+        currencyConfig = loadFeatureConfiguration("Currency/config.yml");
+        FileConfiguration currencyMessages = loadFeatureConfiguration("Currency/messages.yml");
+        spawnShopConfig = loadFeatureConfiguration("SpawnShop/config.yml");
+        blackMarketConfig = loadFeatureConfiguration("BlackMarket/config.yml");
+        boolean saveCurrency = false;
+        boolean saveCurrencyMessages = false;
+        boolean saveSpawnShop = false;
+        boolean saveBlackMarket = false;
+
+        if (root.contains("storage-file")) {
+            if (!currencyExisted || !currencyConfig.contains("storage-file")) {
+                currencyConfig.set("storage-file", root.get("storage-file"));
+                saveCurrency = true;
+            }
+            root.set("storage-file", null);
+        }
+        if (root.getConfigurationSection("messages") != null) {
+            mergeConfiguration(root.getConfigurationSection("messages"), currencyMessages, "messages", !currencyMessagesExisted);
+            root.set("messages", null);
+            saveCurrencyMessages = true;
+        }
+        if (root.getConfigurationSection("spawn-shop") != null) {
+            mergeConfiguration(root.getConfigurationSection("spawn-shop"), spawnShopConfig, "spawn-shop", !spawnShopExisted);
+            root.set("spawn-shop", null);
+            saveSpawnShop = true;
+        }
+        if (root.getConfigurationSection("black-market") != null) {
+            mergeConfiguration(root.getConfigurationSection("black-market"), blackMarketConfig, "black-market", !blackMarketExisted);
+            root.set("black-market", null);
+            saveBlackMarket = true;
+        }
+
+        String usage = currencyMessages.getString("messages.usage");
+        if (usage != null && usage.contains("/admin ")) {
+            currencyMessages.set("messages.usage", usage.replace("/admin ", "/adminpc "));
+            saveCurrencyMessages = true;
+        }
+        saveConfigurationIfNeeded(currencyConfig, currencyFile, saveCurrency);
+        saveConfigurationIfNeeded(currencyMessages, currencyMessagesFile, saveCurrencyMessages);
+        saveConfigurationIfNeeded(spawnShopConfig, spawnShopFile, saveSpawnShop);
+        saveConfigurationIfNeeded(blackMarketConfig, blackMarketFile, saveBlackMarket);
+        if (hasLegacySettings) {
+            root.save(new File(getDataFolder(), "config.yml"));
+            reloadConfig();
+        }
+        reloadFeatureConfigurations();
+    }
+
+    private void reloadFeatureConfigurations() {
+        currencyConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "Currency/config.yml"));
+        spawnShopConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "SpawnShop/config.yml"));
+        blackMarketConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "BlackMarket/config.yml"));
+    }
+
+    private FileConfiguration loadFeatureConfiguration(String path) throws IOException {
+        File file = new File(getDataFolder(), path);
+        File parent = file.getParentFile();
+        if (!parent.exists() && !parent.mkdirs()) throw new IOException("Could not create feature directory " + parent.getName() + ".");
+        if (!file.exists()) saveResource(path.replace(File.separatorChar, '/'), false);
+        return YamlConfiguration.loadConfiguration(file);
+    }
+
+    private void saveResourceIfMissing(String resource, File file) {
         if (!file.exists()) saveResource(resource, false);
+    }
+
+    private void saveConfigurationIfNeeded(FileConfiguration configuration, File file, boolean save) throws IOException {
+        if (save) configuration.save(file);
+    }
+
+    private void mergeConfiguration(ConfigurationSection source, FileConfiguration destination, String prefix,
+                                    boolean override) {
+        for (String key : source.getKeys(false)) {
+            String path = prefix.isEmpty() ? key : prefix + "." + key;
+            ConfigurationSection child = source.getConfigurationSection(key);
+            if (child != null) mergeConfiguration(child, destination, path, override);
+            else if (override || !destination.contains(path)) destination.set(path, source.get(key));
+        }
+    }
+
+    private void relocateLegacyYaml(File source, File destination) throws IOException {
+        if (!source.isFile()) return;
+        backupFile(source, new File(destination.getParentFile(), ".migration-backups/" + destination.getName() + ".bak"));
+        if (!destination.exists()) {
+            Files.move(source.toPath(), destination.toPath());
+            return;
+        }
+        FileConfiguration oldConfiguration = YamlConfiguration.loadConfiguration(source);
+        FileConfiguration newConfiguration = YamlConfiguration.loadConfiguration(destination);
+        mergeConfiguration(oldConfiguration, newConfiguration, "", false);
+        newConfiguration.save(destination);
+        Files.delete(source.toPath());
+    }
+
+    private void backupFile(File source, File backup) throws IOException {
+        if (!source.isFile() || backup.exists()) return;
+        File parent = backup.getParentFile();
+        if (!parent.exists() && !parent.mkdirs()) throw new IOException("Could not create backup directory.");
+        Files.copy(source.toPath(), backup.toPath(), StandardCopyOption.COPY_ATTRIBUTES);
+    }
+
+    private void prepareLegacyCurrencyFiles() throws IOException {
+        File currencyFolder = new File(getDataFolder(), "Currency");
+        for (String name : List.of("balance.yml", "balances.yml")) {
+            relocateLegacyYaml(new File(getDataFolder(), name), new File(currencyFolder, name));
+        }
+        for (String name : List.of(".balance-yaml-migrated", ".balances-yaml-migrated", ".legacy-diamond-migrated")) {
+            File oldMarker = new File(getDataFolder(), name);
+            if (!oldMarker.isFile()) continue;
+            File newMarker = new File(currencyFolder, name);
+            if (!newMarker.exists()) Files.move(oldMarker.toPath(), newMarker.toPath());
+            else Files.delete(oldMarker.toPath());
+        }
     }
 
     private void refreshPlayerLevelPlaceholderExpansion() {
@@ -374,7 +553,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         private org.bukkit.configuration.file.FileConfiguration config;
 
         private FileConfigurationBridge(PacificaCore plugin) { this.plugin = plugin; reload(); }
-        private void reload() { config = plugin.getConfig(); }
-        private String get(String key) { return config.getString("messages." + key, key); }
+        private void reload() { config = YamlConfiguration.loadConfiguration(new File(plugin.getDataFolder(), "Currency/messages.yml")); }
+        private String get(String key, String fallback) { return config.getString("messages." + key, fallback); }
     }
 }

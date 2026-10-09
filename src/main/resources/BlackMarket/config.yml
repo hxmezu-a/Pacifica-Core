@@ -1,0 +1,33 @@
+black-market:
+  durations-hours: [8, 16, 24, 48]
+  enabled: true
+  tax-percent: 0
+  item-matching:
+    ignore-damage: true
+  durations:
+    8h:
+      duration: 8h
+      tax: 0
+      tax-mode: percent
+    16h:
+      duration: 16h
+      tax: 0.5
+      tax-mode: percent
+    24h:
+      duration: 24h
+      tax: 1.0
+      tax-mode: percent
+    48h:
+      duration: 48h
+      tax: 2.0
+      tax-mode: percent
+  auction:
+    losing-bid-refund-percent: 70
+  categories:
+    weapon: true
+    armor: true
+    player-head: true
+    rare: true
+    cheat-code: true
+    cosmetics: true
+    misc: true

@@ -197,7 +197,7 @@ public final class SpawnShopGuiManager implements Listener {
             case SHOP_LOCKED -> "shop-locked";
             default -> "purchase-failed";
         };
-        String message = plugin.getConfig().getString("spawn-shop.messages." + key, defaultMessage(key));
+        String message = plugin.getSpawnShopConfig().getString("spawn-shop.messages." + key, defaultMessage(key));
         SpawnShopItem item = shops.getItem(holder.itemId()).orElse(null);
         double total = item == null ? 0 : BigDecimal.valueOf(item.unitPrice()).multiply(BigDecimal.valueOf(quantity)).doubleValue();
         message = message.replace("%quantity%", String.valueOf(quantity))
@@ -285,7 +285,7 @@ public final class SpawnShopGuiManager implements Listener {
 
     private void sendLocked(Player player, String shopId) {
         int required = shops.getRequiredLevel(shopId);
-        String message = plugin.getConfig().getString("spawn-shop.messages.shop-locked",
+        String message = plugin.getSpawnShopConfig().getString("spawn-shop.messages.shop-locked",
                 "&cYou need Pacifica Level %required-level% to access this shop.");
         player.sendMessage(color(message.replace("%required-level%", String.valueOf(required))));
     }

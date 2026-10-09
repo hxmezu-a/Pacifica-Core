@@ -1,5 +1,6 @@
 package com.districtx.pacificacore.shop;
 
+import com.districtx.pacificacore.PacificaCore;
 import com.districtx.pacificacore.api.PlayerLevelService;
 import com.districtx.pacificacore.api.ShopAccessService;
 import com.districtx.pacificacore.api.SpawnShop;
@@ -12,6 +13,7 @@ import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -58,7 +60,8 @@ public final class SpawnShopManager implements SpawnShopService, ShopAccessServi
     public Optional<SpawnShop> getShop(String shopId) {
         String id = normalize(shopId);
         if (!SHOP_IDS.contains(id)) return Optional.empty();
-        ConfigurationSection section = plugin.getConfig().getConfigurationSection("spawn-shop.shops." + id);
+        FileConfiguration config = plugin instanceof PacificaCore core ? core.getSpawnShopConfig() : plugin.getConfig();
+        ConfigurationSection section = config.getConfigurationSection("spawn-shop.shops." + id);
         String title = section == null ? defaultTitle(id) : section.getString("title", defaultTitle(id));
         int defaultLevel = switch (id) {
             case "armor" -> 10;

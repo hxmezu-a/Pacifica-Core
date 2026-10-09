@@ -4,6 +4,7 @@ import com.districtx.pacificacore.api.EconomyService;
 import com.districtx.pacificacore.storage.BlackMarketRepository;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.math.BigDecimal;
@@ -13,20 +14,33 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 public final class BlackMarketServiceImpl implements BlackMarketService {
     private final JavaPlugin plugin;
     private final BlackMarketRepository repository;
     private final EconomyService economy;
+    private final Supplier<FileConfiguration> configuration;
     private final ItemMatcher itemMatcher;
     private final BlackMarketCategoryDetector categoryDetector;
     private final BlackMarketOfferSlotRegistry offerSlotRegistry = new BlackMarketOfferSlotRegistry();
 
     public BlackMarketServiceImpl(JavaPlugin plugin, BlackMarketRepository repository, EconomyService economy) {
+        this(plugin, repository, economy, plugin::getConfig);
+    }
+
+    public BlackMarketServiceImpl(JavaPlugin plugin, BlackMarketRepository repository, EconomyService economy,
+                                  FileConfiguration config) {
+        this(plugin, repository, economy, () -> config);
+    }
+
+    public BlackMarketServiceImpl(JavaPlugin plugin, BlackMarketRepository repository, EconomyService economy,
+                                  Supplier<FileConfiguration> configuration) {
         this.plugin = plugin;
         this.repository = repository;
         this.economy = economy;
-        this.itemMatcher = new ItemMatcher(plugin);
+        this.configuration = configuration;
+        this.itemMatcher = new ItemMatcher(configuration.get());
         this.categoryDetector = new BlackMarketCategoryDetector(plugin);
     }
 
@@ -313,7 +327,7 @@ public final class BlackMarketServiceImpl implements BlackMarketService {
 
     @Override
     public synchronized int cleanupExpiredOffers() {
-        return cleanupExpiredOffers(plugin.getConfig().getDouble(
+        return cleanupExpiredOffers(configuration.get().getDouble(
                 "black-market.auction.losing-bid-refund-percent", 70.0D));
     }
 
@@ -347,7 +361,7 @@ public final class BlackMarketServiceImpl implements BlackMarketService {
     }
 
     private void refundBid(UUID bidder, BigDecimal amount) {
-        refundBid(bidder, amount, plugin.getConfig().getDouble(
+        refundBid(bidder, amount, configuration.get().getDouble(
                 "black-market.auction.losing-bid-refund-percent", 70.0D));
     }
 

@@ -6,12 +6,17 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.configuration.file.FileConfiguration;
 
 public final class ItemMatcher {
     private final boolean ignoreDamage;
 
     public ItemMatcher(JavaPlugin plugin) {
         this.ignoreDamage = plugin.getConfig().getBoolean("black-market.item-matching.ignore-damage", true);
+    }
+
+    public ItemMatcher(FileConfiguration config) {
+        this.ignoreDamage = config.getBoolean("black-market.item-matching.ignore-damage", true);
     }
 
     public boolean matches(ItemStack expected, ItemStack actual) {

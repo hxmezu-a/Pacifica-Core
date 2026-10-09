@@ -46,20 +46,20 @@ public final class SpawnShopAdminCommand implements AdminSubCommand {
     @Override
     public boolean execute(CommandSender sender, String[] args) {
         if (!sender.hasPermission(PERMISSION)) return send(sender,
-                plugin.getConfig().getString("messages.no-permission", "&cYou do not have permission."));
+                plugin.getMessage("no-permission", "&cYou do not have permission."));
         if (args.length == 3 && args[0].equalsIgnoreCase("link")) {
             return linkNpc(sender, args[1], args[2]);
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("unlink")) return unlinkNpc(sender, args[1]);
         if (!(sender instanceof Player player)) return send(sender,
-                plugin.getConfig().getString("messages.players-only", "&cOnly players can use this command."));
+                plugin.getMessage("players-only", "&cOnly players can use this command."));
         if (args.length == 3 && !args[0].equalsIgnoreCase("weapon")) {
             return addStandardItem(player, args[0], args[1], args[2]);
         }
         if (args.length == 4 && args[0].equalsIgnoreCase("weapon")) {
             return addWeaponItem(player, args[1], args[2], args[3]);
         }
-        return send(sender, "&eUsage: /admin sshop <shop> addhand <price> or /admin sshop weapon addhand <category> <price>");
+        return send(sender, "&eUsage: /adminpc sshop <shop> addhand <price> or /adminpc sshop weapon addhand <category> <price>");
     }
 
     private boolean linkNpc(CommandSender sender, String shopId, String npcId) {
@@ -92,14 +92,14 @@ public final class SpawnShopAdminCommand implements AdminSubCommand {
             return send(player, "&cShop does not exist.");
         }
         if (!action.equalsIgnoreCase("addhand")) return send(player,
-                "&eUsage: /admin sshop <shop> addhand <price>");
+                "&eUsage: /adminpc sshop <shop> addhand <price>");
         return addHeldItem(player, shop, null, priceText);
     }
 
     private boolean addWeaponItem(Player player, String action, String category, String priceText) {
         String weaponCategory = category.toLowerCase(Locale.ROOT);
         if (!action.equalsIgnoreCase("addhand")) return send(player,
-                "&eUsage: /admin sshop weapon addhand <category> <price>");
+                "&eUsage: /adminpc sshop weapon addhand <category> <price>");
         if (!CATEGORIES.contains(weaponCategory)) return send(player, "&cUnknown weapon category.");
         return addHeldItem(player, "weapon", weaponCategory, priceText);
     }

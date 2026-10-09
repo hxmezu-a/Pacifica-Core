@@ -1,6 +1,7 @@
 package com.districtx.pacificacore.market;
 
 import com.districtx.pacificacore.api.EconomyService;
+import com.districtx.pacificacore.PacificaCore;
 import com.districtx.pacificacore.command.AdminSubCommand;
 import com.districtx.pacificacore.storage.BlackMarketRepository;
 import com.districtx.pacificacore.storage.DatabaseManager;
@@ -56,7 +57,8 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
         this.offerKey = new org.bukkit.NamespacedKey(plugin, "offer");
         this.categoryKey = new org.bukkit.NamespacedKey(plugin, "blackmarket_category");
         this.categoryDetector = new BlackMarketCategoryDetector(plugin);
-        this.service = new BlackMarketServiceImpl(plugin, new BlackMarketRepository(plugin, database), economy);
+        this.service = new BlackMarketServiceImpl(plugin, new BlackMarketRepository(plugin, database), economy,
+                this::configuration);
         cleanupTask = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, this::scheduleExpiredOfferCleanup,
                 20L * 60L, 20L * 60L);
     }
@@ -93,7 +95,7 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
 
     public void scheduleExpiredOfferCleanup() {
         if (!cleanupRunning.compareAndSet(false, true)) return;
-        double refundPercent = plugin.getConfig().getDouble("black-market.auction.losing-bid-refund-percent", 70.0D);
+        double refundPercent = configuration().getDouble("black-market.auction.losing-bid-refund-percent", 70.0D);
         try {
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                 try {
@@ -131,7 +133,7 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
             return true;
         }
         if (args.length != 3 || !args[0].equalsIgnoreCase("category") || !args[1].equalsIgnoreCase("add")) {
-            player.sendMessage(ChatColor.RED + "Usage: /admin bm category add <weapon|armor|playerheads|rares|cheatcode|cosmetics>");
+            player.sendMessage(ChatColor.RED + "Usage: /adminpc bm category add <weapon|armor|playerheads|rares|cheatcode|cosmetics>");
             return true;
         }
         BlackMarketCategory category;
@@ -571,7 +573,7 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
     }
 
     private List<Integer> configuredDurations() {
-        List<Integer> values = plugin.getConfig().getIntegerList("black-market.durations-hours");
+        List<Integer> values = configuration().getIntegerList("black-market.durations-hours");
         if (values.size() >= 4) return values.subList(0, 4);
         return Arrays.asList(8, 16, 24, 48);
     }
@@ -579,13 +581,13 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
     private BigDecimal taxFor(MarketHolder state, int hours) {
         BigDecimal value = state.price.multiply(BigDecimal.valueOf(state.quantity));
         String path = "black-market.durations." + hours + "h.tax";
-        if (plugin.getConfig().contains(path)) {
-            double configured = plugin.getConfig().getDouble(path, 0.0D);
-            String mode = plugin.getConfig().getString("black-market.durations." + hours + "h.tax-mode", "percent");
+        if (configuration().contains(path)) {
+            double configured = configuration().getDouble(path, 0.0D);
+            String mode = configuration().getString("black-market.durations." + hours + "h.tax-mode", "percent");
             if ("fixed".equalsIgnoreCase(mode)) return BigDecimal.valueOf(configured);
             return value.multiply(BigDecimal.valueOf(configured)).divide(BigDecimal.valueOf(100));
         }
-        double percent = plugin.getConfig().getDouble("black-market.tax-percent", 0.0D);
+        double percent = configuration().getDouble("black-market.tax-percent", 0.0D);
         return value.multiply(BigDecimal.valueOf(percent)).divide(BigDecimal.valueOf(100));
     }
 
@@ -599,7 +601,11 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
             case COSMETICS -> "cosmetics";
             case MISC -> "misc";
         };
-        return plugin.getConfig().getBoolean("black-market.categories." + key, true);
+        return configuration().getBoolean("black-market.categories." + key, true);
+    }
+
+    private org.bukkit.configuration.file.FileConfiguration configuration() {
+        return plugin instanceof PacificaCore core ? core.getBlackMarketConfig() : plugin.getConfig();
     }
 
     private MarketHolder copyState(Screen type, MarketHolder source) {

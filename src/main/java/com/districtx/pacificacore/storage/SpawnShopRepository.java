@@ -29,7 +29,7 @@ public final class SpawnShopRepository {
 
     public List<SpawnShopItem> findAll() {
         try {
-            return database.player(connection -> {
+            return database.spawnShop(connection -> {
                 List<SpawnShopItem> items = new ArrayList<>();
                 try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM spawn_shop_items");
                      ResultSet results = statement.executeQuery()) {
@@ -60,7 +60,7 @@ public final class SpawnShopRepository {
     public boolean save(SpawnShopItem item) {
         try {
             String itemData = serialize(item.itemStack());
-            return database.player(connection -> {
+            return database.spawnShop(connection -> {
                 try (PreparedStatement statement = connection.prepareStatement(
                         "INSERT INTO spawn_shop_items (item_id, shop_id, category, slot, item_stack, unit_price) "
                                 + "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(item_id) DO UPDATE SET "
@@ -83,7 +83,7 @@ public final class SpawnShopRepository {
 
     public boolean delete(UUID itemId) {
         try {
-            return database.player(connection -> {
+            return database.spawnShop(connection -> {
                 try (PreparedStatement statement = connection.prepareStatement(
                         "DELETE FROM spawn_shop_items WHERE item_id = ?")) {
                     statement.setString(1, itemId.toString());

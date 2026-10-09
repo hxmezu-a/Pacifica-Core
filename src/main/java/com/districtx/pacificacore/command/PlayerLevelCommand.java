@@ -141,7 +141,7 @@ public final class PlayerLevelCommand implements CommandExecutor, AdminSubComman
     }
 
     private boolean send(CommandSender sender, String key, Map<String, String> values) {
-        String message = plugin.getConfig().getString("messages." + key, key);
+        String message = plugin.getMessage(key);
         if (key.equals("no-permission") || key.equals("players-only") || key.equals("player-not-found")) {
             return sendMessage(sender, message, values);
         }

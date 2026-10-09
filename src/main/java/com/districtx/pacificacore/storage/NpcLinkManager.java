@@ -77,7 +77,7 @@ public final class NpcLinkManager implements NpcLinkService {
 
     private void load() {
         try {
-            database.player(connection -> {
+            database.spawnShop(connection -> {
                 try (PreparedStatement statement = connection.prepareStatement(
                         "SELECT feature_id, npc_id FROM npc_links");
                      ResultSet results = statement.executeQuery()) {
@@ -122,7 +122,7 @@ public final class NpcLinkManager implements NpcLinkService {
     private void submit(DatabaseManager.SqlOperation<Void> operation) {
         writes.execute(() -> {
             try {
-                database.player(operation);
+                database.spawnShop(operation);
             } catch (SQLException exception) {
                 plugin.getLogger().warning("Could not save external NPC links: " + exception.getMessage());
             }

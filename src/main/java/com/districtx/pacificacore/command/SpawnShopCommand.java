@@ -20,10 +20,10 @@ public final class SpawnShopCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("pacifica.spawnshop")) {
-            return send(sender, plugin.getConfig().getString("messages.no-permission", "&cYou do not have permission."));
+            return send(sender, plugin.getMessage("no-permission", "&cYou do not have permission."));
         }
         if (!(sender instanceof Player player)) {
-            return send(sender, plugin.getConfig().getString("messages.players-only", "&cOnly players can use this command."));
+            return send(sender, plugin.getMessage("players-only", "&cOnly players can use this command."));
         }
         guiManager.openMainMenu(player);
         return true;

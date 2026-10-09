@@ -30,7 +30,7 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
             if (accessibleCommands(sender).isEmpty()) return deny(sender);
-            sender.sendMessage(ChatColor.YELLOW + "Usage: /admin <" + String.join("|", accessibleCommands(sender)) + "> ...");
+            sender.sendMessage(ChatColor.YELLOW + "Usage: /adminpc <" + String.join("|", accessibleCommands(sender)) + "> ...");
             return true;
         }
         AdminSubCommand subCommand = commands.get(args[0].toLowerCase(Locale.ROOT));

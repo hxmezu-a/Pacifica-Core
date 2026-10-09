@@ -117,7 +117,7 @@ public final class SpawnShopNpcLinkManager implements SpawnShopNpcLinkService {
 
     private void load() {
         try {
-            database.player(connection -> {
+            database.spawnShop(connection -> {
                 try (PreparedStatement statement = connection.prepareStatement(
                         "SELECT npc_id, shop_id FROM spawn_shop_npc_links");
                      ResultSet results = statement.executeQuery()) {
@@ -137,7 +137,7 @@ public final class SpawnShopNpcLinkManager implements SpawnShopNpcLinkService {
     private void submit(DatabaseManager.SqlOperation<Void> operation) {
         writes.execute(() -> {
             try {
-                database.player(operation);
+                database.spawnShop(operation);
             } catch (SQLException exception) {
                 plugin.getLogger().warning("Could not save Spawn Shop external NPC links: " + exception.getMessage());
             }
