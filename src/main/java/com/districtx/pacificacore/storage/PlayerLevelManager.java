@@ -4,6 +4,7 @@ import com.districtx.pacificacore.PacificaCore;
 import com.districtx.pacificacore.api.ExperienceGainResult;
 import com.districtx.pacificacore.api.ExperienceSource;
 import com.districtx.pacificacore.api.LevelProgression;
+import com.districtx.pacificacore.api.PlayerLevelSnapshot;
 import com.districtx.pacificacore.api.PlayerLevelService;
 import com.districtx.pacificacore.api.LevelRewardService;
 import com.districtx.pacificacore.api.RankExperienceBonusService;
@@ -14,6 +15,7 @@ import com.districtx.pacificacore.api.event.PlayerLevelUpEvent;
 import com.districtx.pacificacore.api.event.PlayerLevelChangeEvent;
 import com.districtx.pacificacore.api.event.PrestigeUnlockEvent;
 import com.districtx.pacificacore.level.ExperienceFormatter;
+import com.districtx.pacificacore.level.LevelDisplayFormatter;
 import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.Bukkit;
@@ -27,6 +29,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.math.BigDecimal;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
@@ -35,7 +38,7 @@ public final class PlayerLevelManager implements PlayerLevelService {
     private final PacificaCore plugin;
     private final PlayerLevelRepository repository;
     private final PendingLevelRewardRepository pendingRewards;
-    private volatile LevelProgression progression;
+    private volatile ExponentialLevelProgression progression;
     private volatile LevelRewardService rewardService;
     private volatile RankExperienceBonusService rankBonuses;
     private volatile LevelMenuService levelMenus;
@@ -90,16 +93,45 @@ public final class PlayerLevelManager implements PlayerLevelService {
         this.levelMenus = levelMenus;
     }
 
-    @Override public double getExperience(UUID playerId) { return repository.getExperience(playerId); }
+    @Override public double getExperience(UUID playerId) { return repository.getExactExperience(playerId).doubleValue(); }
+
+    @Override
+    public BigDecimal getTotalExperience(UUID playerId) {
+        return repository.getExactExperience(playerId);
+    }
 
     @Override
     public int getLevel(UUID playerId) {
-        return progression.getLevel(getExperience(playerId));
+        return progression.getLevel(repository.getExactExperience(playerId));
     }
 
     @Override
     public double getExperienceToNextLevel(UUID playerId) {
-        return progression.getExperienceToNextLevel(getExperience(playerId));
+        return progression.getExperienceToNextLevelExact(repository.getExactExperience(playerId)).doubleValue();
+    }
+
+    @Override
+    public BigDecimal getCurrentLevelExperience(UUID playerId) {
+        BigDecimal experience = repository.getExactExperience(playerId);
+        int level = progression.getLevel(experience);
+        return experience.subtract(progression.getExperienceRequiredForLevelExact(level)).max(BigDecimal.ZERO);
+    }
+
+    @Override
+    public BigDecimal getExperienceRequiredForNextLevel(UUID playerId) {
+        return progression.getExperienceRequiredForNextLevelExact(getLevel(playerId));
+    }
+
+    @Override
+    public PlayerLevelSnapshot getProgressionSnapshot(UUID playerId) {
+        BigDecimal totalExperience = repository.getExactExperience(playerId);
+        int level = progression.getLevel(totalExperience);
+        return new PlayerLevelSnapshot(playerId, level, totalExperience,
+                totalExperience.subtract(progression.getExperienceRequiredForLevelExact(level)).max(BigDecimal.ZERO),
+                progression.getExperienceRequiredForNextLevelExact(level),
+                progression.getExperienceToNextLevelExact(totalExperience),
+                progression.getProgressToNextLevel(totalExperience),
+                playerId != null && level < progression.getMaximumLevel());
     }
 
     @Override
@@ -109,7 +141,7 @@ public final class PlayerLevelManager implements PlayerLevelService {
 
     @Override
     public double getProgressToNextLevel(UUID playerId) {
-        return progression.getProgressToNextLevel(getExperience(playerId));
+        return progression.getProgressToNextLevel(repository.getExactExperience(playerId));
     }
 
     @Override public int getMinimumLevel() { return progression.getMinimumLevel(); }
@@ -137,9 +169,9 @@ public final class PlayerLevelManager implements PlayerLevelService {
         ExperienceSource effectiveSource = source == null ? ExperienceSource.OTHER : source;
         if (playerId == null) return emptyResult(null, effectiveSource);
         if (!Double.isFinite(amount) || amount <= 0.0) {
-            double previous = getExperience(playerId);
-            return result(playerId, previous, 0.0, previous, progression.getLevel(previous),
-                    progression.getLevel(previous), effectiveSource);
+            BigDecimal previous = repository.getExactExperience(playerId);
+            int level = progression.getLevel(previous);
+            return result(playerId, previous.doubleValue(), 0.0, previous.doubleValue(), level, level, effectiveSource);
         }
         return onMainThread(() -> addExperienceOnMainThread(playerId, amount, effectiveSource),
                 emptyResult(playerId, effectiveSource));
@@ -174,7 +206,15 @@ public final class PlayerLevelManager implements PlayerLevelService {
     @Override
     public boolean setLevel(UUID playerId, int level) {
         if (playerId == null || level < getMinimumLevel()) return false;
-        return setExperience(playerId, getExperienceRequiredForLevel(level));
+        BigDecimal experience = progression.getExperienceRequiredForLevelExact(level);
+        return onMainThread(() -> {
+            PlayerLevelRepository.Change change = repository.setExperience(playerId, experience);
+            if (!change.successful()) return false;
+            fireLevelChange(playerId, change.previous(), change.current());
+            fireLevelUp(playerId, change.previous(), change.current());
+            refreshMenu(playerId, change.current());
+            return true;
+        }, false);
     }
 
     @Override
@@ -185,7 +225,7 @@ public final class PlayerLevelManager implements PlayerLevelService {
 
     private synchronized ExperienceGainResult addExperienceOnMainThread(UUID playerId, double proposedAmount,
                                                                          ExperienceSource source) {
-        double before = repository.getExperience(playerId);
+        BigDecimal before = repository.getExactExperience(playerId);
         int previousLevel = progression.getLevel(before);
         Player player = Bukkit.getPlayer(playerId);
         double amount = proposedAmount;
@@ -193,23 +233,24 @@ public final class PlayerLevelManager implements PlayerLevelService {
         if (bonusService != null) amount = bonusService.applyBonus(playerId, source, amount);
         if (player != null) {
             PlayerExperienceGainEvent event = new PlayerExperienceGainEvent(
-                    player, amount, source, before, previousLevel, progression);
+                    player, amount, source, before.doubleValue(), previousLevel, progression);
             Bukkit.getPluginManager().callEvent(event);
             if (event.isCancelled()) {
-                return result(playerId, before, 0.0, before, previousLevel, previousLevel, source);
+                return result(playerId, before.doubleValue(), 0.0, before.doubleValue(), previousLevel, previousLevel, source);
             }
             amount = event.getAmount();
         }
         if (!Double.isFinite(amount) || amount <= 0.0) {
-            return result(playerId, before, 0.0, before, previousLevel, previousLevel, source);
+            return result(playerId, before.doubleValue(), 0.0, before.doubleValue(), previousLevel, previousLevel, source);
         }
-        PlayerLevelRepository.Change change = repository.addExperience(playerId, amount);
+        PlayerLevelRepository.Change change = repository.addExperience(playerId, BigDecimal.valueOf(amount));
         if (!change.successful()) {
-            return result(playerId, before, 0.0, before, previousLevel, previousLevel, source);
+            return result(playerId, before.doubleValue(), 0.0, before.doubleValue(), previousLevel, previousLevel, source);
         }
         int newLevel = progression.getLevel(change.current());
-        ExperienceGainResult result = result(playerId, change.previous(), change.current() - change.previous(),
-                change.current(), progression.getLevel(change.previous()), newLevel, source);
+        ExperienceGainResult result = result(playerId, change.previous().doubleValue(),
+                change.current().subtract(change.previous()).doubleValue(), change.current().doubleValue(),
+                progression.getLevel(change.previous()), newLevel, source);
         Bukkit.getPluginManager().callEvent(new PlayerExperienceGrantedEvent(result));
         fireLevelChange(playerId, change.previous(), change.current());
         fireLevelUp(playerId, change.previous(), change.current());
@@ -217,14 +258,14 @@ public final class PlayerLevelManager implements PlayerLevelService {
         refreshMenu(playerId, change.current());
         if (plugin.getLevelConfig().getBoolean("leveling.debug.xp", false)) {
             plugin.getLogger().info("Player Level XP: player=" + playerId + " source=" + source
-                    + " amount=+" + format(amount) + " previous=" + format(change.previous())
-                    + " new=" + format(change.current()) + " level=" + result.getPreviousLevel()
+                    + " amount=+" + format(amount) + " previous=" + format(change.previous().doubleValue())
+                    + " new=" + format(change.current().doubleValue()) + " level=" + result.getPreviousLevel()
                     + "->" + result.getNewLevel());
         }
         return result;
     }
 
-    private void fireLevelUp(UUID playerId, double previousExperience, double newExperience) {
+    private void fireLevelUp(UUID playerId, BigDecimal previousExperience, BigDecimal newExperience) {
         int previousLevel = progression.getLevel(previousExperience);
         int newLevel = progression.getLevel(newExperience);
         if (newLevel <= previousLevel) return;
@@ -241,15 +282,16 @@ public final class PlayerLevelManager implements PlayerLevelService {
         if (!plugin.getLevelConfig().getBoolean("leveling.messages.level-up.enabled", true)) return;
         String message = plugin.getLevelConfig().getString("leveling.messages.level-up.message", "");
         if (message.isEmpty()) return;
-        message = message.replace("%old_level%", String.valueOf(previousLevel))
-                .replace("%new_level%", String.valueOf(newLevel))
-                .replace("%level%", String.valueOf(newLevel))
-                .replace("%exp%", format(newExperience))
-                .replace("%exp_to_next_level%", format(progression.getExperienceToNextLevel(newExperience)));
+        message = message.replace("%old_level%", LevelDisplayFormatter.format(plugin, previousLevel))
+                .replace("%new_level%", LevelDisplayFormatter.format(plugin, newLevel))
+                .replace("%level%", LevelDisplayFormatter.format(plugin, newLevel))
+                .replace("%exp%", format(newExperience.doubleValue()))
+                .replace("%exp_to_next_level%", format(
+                        progression.getExperienceToNextLevelExact(newExperience).doubleValue()));
         player.sendMessage(color(message));
     }
 
-    private void fireLevelChange(UUID playerId, double previousExperience, double newExperience) {
+    private void fireLevelChange(UUID playerId, BigDecimal previousExperience, BigDecimal newExperience) {
         int previousLevel = progression.getLevel(previousExperience);
         int newLevel = progression.getLevel(newExperience);
         if (previousLevel == newLevel) return;
@@ -293,7 +335,7 @@ public final class PlayerLevelManager implements PlayerLevelService {
         String message = plugin.getLevelConfig().getString("leveling.messages.experience-gain",
                 "&e&l+ &a&l%xp%");
         message = message.replace("%xp%", ExperienceFormatter.formatReward(amount))
-                .replace("%level%", String.valueOf(level))
+                .replace("%level%", LevelDisplayFormatter.format(plugin, level))
                 .replace("%player%", player.getName())
                 .replace("%source%", source.name())
                 .replace("%exp%", format(newExperience))
@@ -330,27 +372,29 @@ public final class PlayerLevelManager implements PlayerLevelService {
         return org.bukkit.ChatColor.translateAlternateColorCodes('&', message);
     }
 
-    private void refreshMenu(UUID playerId, double experience) {
+    private void refreshMenu(UUID playerId, BigDecimal experience) {
         LevelMenuService menus = levelMenus;
         Player player = Bukkit.getPlayer(playerId);
-        if (player != null) {
-            player.setLevel(progression.getLevel(experience));
-            player.setExp(progression.getExpBarProgress(experience));
-        }
+        if (player != null) updateExperienceDisplay(player, experience);
         if (menus != null && player != null) menus.refresh(player);
+    }
+
+    public void refreshExperienceDisplay(Player player) {
+        if (player == null) return;
+        updateExperienceDisplay(player, repository.getExactExperience(player.getUniqueId()));
     }
 
     public void refreshPlayer(Player player) {
         if (player == null) return;
         deferredNotificationPlayers.remove(player.getUniqueId());
-        double experience = getExperience(player.getUniqueId());
+        BigDecimal experience = repository.getExactExperience(player.getUniqueId());
         int level = progression.getLevel(experience);
         float progress = progression.getExpBarProgress(experience);
-        player.setLevel(level);
-        player.setExp(progress);
+        updateExperienceDisplay(player, experience);
         if (plugin.getLevelConfig().getBoolean("debug.level-display", false)) {
-            double currentLevelXp = progression.getExperienceIntoCurrentLevel(experience);
-            double requiredXp = progression.getExperienceRequiredForNextLevel(level);
+            double currentLevelXp = experience.subtract(progression.getExperienceRequiredForLevelExact(level))
+                    .doubleValue();
+            double requiredXp = progression.getExperienceRequiredForNextLevelExact(level).doubleValue();
             plugin.getLogger().info("Refreshing level display for " + player.getName());
             plugin.getLogger().info("Level: " + level);
             plugin.getLogger().info("Current XP: " + ExperienceFormatter.formatXp(currentLevelXp));
@@ -364,6 +408,11 @@ public final class PlayerLevelManager implements PlayerLevelService {
         if (pending != null) {
             for (ExperienceGainResult result : pending) notifyExperience(player, result);
         }
+    }
+
+    private void updateExperienceDisplay(Player player, BigDecimal experience) {
+        player.setLevel(progression.getLevel(experience));
+        player.setExp(progression.getExpBarProgress(experience));
     }
 
     public void cleanupPendingNotifications(UUID playerId) {

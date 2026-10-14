@@ -3,6 +3,7 @@ package com.districtx.pacificacore.level.gui;
 import com.districtx.pacificacore.PacificaCore;
 import com.districtx.pacificacore.api.PrestigeService;
 import com.districtx.pacificacore.api.PlayerLevelService;
+import com.districtx.pacificacore.level.LevelDisplayFormatter;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -44,7 +45,7 @@ public final class PrestigeMenu implements Listener {
                 plugin.getLevelConfig().getString("gui.prestige.info.name", "&e&lPrestige %prestige%"),
                 plugin.getLevelConfig().getStringList("gui.prestige.info.lore"),
                 Map.of("prestige", String.valueOf(prestige.getPrestige(player.getUniqueId())),
-                        "level", String.valueOf(levels.getLevel(player.getUniqueId()))));
+                        "level", LevelDisplayFormatter.format(plugin, levels.getLevel(player.getUniqueId()))));
         int backSlot = slot("gui.prestige.back.slot", 47, inventory.getSize());
         set(inventory, backSlot, plugin.getLevelConfig().getString("gui.prestige.back.material", "REDSTONE"),
                 plugin.getLevelConfig().getString("gui.prestige.back.name", "&c&lBack"),

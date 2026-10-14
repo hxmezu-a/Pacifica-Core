@@ -2,6 +2,7 @@ package com.districtx.pacificacore.api;
 
 import org.bukkit.entity.Player;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 /** Public API for permanent Pacifica Player Level progression. */
@@ -13,6 +14,19 @@ public interface PlayerLevelService {
      * @return Pacifica experience
      */
     double getExperience(UUID playerId);
+
+    /**
+     * Gets the player's exact persisted total experience. The returned value is immutable.
+     *
+     * @param playerId player UUID
+     * @return exact Pacifica experience, or zero for an unknown player
+     */
+    default BigDecimal getTotalExperience(UUID playerId) {
+        if (playerId == null) return BigDecimal.ZERO;
+        double experience = getExperience(playerId);
+        return Double.isFinite(experience) && experience >= 0.0
+                ? BigDecimal.valueOf(experience) : BigDecimal.ZERO;
+    }
 
     /**
      * Gets a player's calculated Pacifica level. Unknown players are at the minimum level.
@@ -51,6 +65,34 @@ public interface PlayerLevelService {
     /** Gets XP earned since the current level began. */
     default double getExperienceIntoCurrentLevel(UUID playerId) {
         return getProgression().getExperienceIntoCurrentLevel(getExperience(playerId));
+    }
+
+    /** Gets the exact experience earned since the current level began. */
+    default BigDecimal getCurrentLevelExperience(UUID playerId) {
+        return BigDecimal.valueOf(getExperienceIntoCurrentLevel(playerId));
+    }
+
+    /** Gets the exact XP cost to advance from the player's current level to the next. */
+    default BigDecimal getExperienceRequiredForNextLevel(UUID playerId) {
+        return BigDecimal.valueOf(getExperienceRequiredForNextLevel(getLevel(playerId)));
+    }
+
+    /** Gets an immutable snapshot of the player's current progression values. */
+    default PlayerLevelSnapshot getProgressionSnapshot(UUID playerId) {
+        int level = getLevel(playerId);
+        return new PlayerLevelSnapshot(playerId, level, getTotalExperience(playerId),
+                getCurrentLevelExperience(playerId), getExperienceRequiredForNextLevel(playerId),
+                BigDecimal.valueOf(getExperienceToNextLevel(playerId)), getProgressToNextLevel(playerId),
+                canAdvanceToNextLevel(playerId));
+    }
+
+    /**
+     * Returns whether the level counter has a representable next level. Levels are derived
+     * immediately from total experience, so this does not predict whether a player has enough
+     * XP to level up from their current progress.
+     */
+    default boolean canAdvanceToNextLevel(UUID playerId) {
+        return playerId != null && getLevel(playerId) < getMaximumLevel();
     }
 
     /**

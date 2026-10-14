@@ -12,6 +12,7 @@ public final class PacificaCoreAPIImpl implements PacificaCoreAPI {
     private final LevelMenuService levelMenus;
     private final AdvancementNotificationService advancementNotifications;
     private final NpcLinkService npcLinkService;
+    private final BankingService bankingService;
 
     public PacificaCoreAPIImpl(DiamondCurrencyService diamonds, EconomyService economy,
                                TransactionService transactions, PlayerLevelService playerLevels,
@@ -39,6 +40,17 @@ public final class PacificaCoreAPIImpl implements PacificaCoreAPI {
                                LevelMenuService levelMenus,
                                AdvancementNotificationService advancementNotifications,
                                NpcLinkService npcLinkService) {
+        this(diamonds, economy, transactions, playerLevels, levelRewards, dailyExperience, prestige, rankBonuses,
+                levelMenus, advancementNotifications, npcLinkService, null);
+    }
+
+    public PacificaCoreAPIImpl(DiamondCurrencyService diamonds, EconomyService economy,
+                               TransactionService transactions, PlayerLevelService playerLevels,
+                               LevelRewardService levelRewards, DailyExperienceService dailyExperience,
+                               PrestigeService prestige, RankExperienceBonusService rankBonuses,
+                               LevelMenuService levelMenus,
+                               AdvancementNotificationService advancementNotifications,
+                               NpcLinkService npcLinkService, BankingService bankingService) {
         this.diamonds = diamonds;
         this.economy = economy;
         this.transactions = transactions;
@@ -50,6 +62,7 @@ public final class PacificaCoreAPIImpl implements PacificaCoreAPI {
         this.levelMenus = levelMenus;
         this.advancementNotifications = advancementNotifications;
         this.npcLinkService = npcLinkService;
+        this.bankingService = bankingService;
     }
 
     @Override
@@ -83,4 +96,5 @@ public final class PacificaCoreAPIImpl implements PacificaCoreAPI {
     @Override public LevelMenuService getLevelMenuService() { return levelMenus; }
     @Override public AdvancementNotificationService getAdvancementNotificationService() { return advancementNotifications; }
     @Override public NpcLinkService getNpcLinkService() { return npcLinkService; }
+    @Override public BankingService getBankingService() { return bankingService; }
 }

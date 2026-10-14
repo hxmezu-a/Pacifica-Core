@@ -5,8 +5,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.math.BigDecimal;
 import java.util.UUID;
-import java.util.function.DoubleUnaryOperator;
+import java.util.function.UnaryOperator;
 
 final class PlayerLevelRepository {
     private final JavaPlugin plugin;
@@ -18,12 +19,16 @@ final class PlayerLevelRepository {
     }
 
     double getExperience(UUID playerId) {
-        if (playerId == null) return 0.0;
+        return getExactExperience(playerId).doubleValue();
+    }
+
+    BigDecimal getExactExperience(UUID playerId) {
+        if (playerId == null) return BigDecimal.ZERO;
         try {
             return database.player(connection -> read(connection, playerId));
         } catch (SQLException | RuntimeException exception) {
             logFailure("read Pacifica experience", exception);
-            return 0.0;
+            return BigDecimal.ZERO;
         }
     }
 
@@ -45,32 +50,43 @@ final class PlayerLevelRepository {
     }
 
     Change addExperience(UUID playerId, double amount) {
-        if (!Double.isFinite(amount) || amount <= 0.0) return Change.failed();
-        return change(playerId, experience -> experience + amount);
+        return !Double.isFinite(amount) || amount <= 0.0
+                ? Change.failed() : addExperience(playerId, BigDecimal.valueOf(amount));
+    }
+
+    Change addExperience(UUID playerId, BigDecimal amount) {
+        if (amount == null || amount.signum() <= 0) return Change.failed();
+        return change(playerId, experience -> experience.add(amount));
     }
 
     Change removeExperience(UUID playerId, double amount) {
         if (!Double.isFinite(amount) || amount < 0.0) return Change.failed();
-        return change(playerId, experience -> Math.max(0.0, experience - amount));
+        BigDecimal removal = BigDecimal.valueOf(amount);
+        return change(playerId, experience -> experience.subtract(removal).max(BigDecimal.ZERO));
     }
 
     Change setExperience(UUID playerId, double amount) {
         if (!Double.isFinite(amount) || amount < 0.0) return Change.failed();
+        return setExperience(playerId, BigDecimal.valueOf(amount));
+    }
+
+    Change setExperience(UUID playerId, BigDecimal amount) {
+        if (amount == null || amount.signum() < 0) return Change.failed();
         return change(playerId, experience -> amount);
     }
 
-    private Change change(UUID playerId, DoubleUnaryOperator operation) {
+    private Change change(UUID playerId, UnaryOperator<BigDecimal> operation) {
         if (playerId == null) return Change.failed();
         try {
             return database.player(connection -> {
-                double previous = read(connection, playerId);
-                double updated = operation.applyAsDouble(previous);
-                if (!Double.isFinite(updated) || updated < 0.0) return Change.failed();
+                BigDecimal previous = read(connection, playerId);
+                BigDecimal updated = operation.apply(previous);
+                if (updated == null || updated.signum() < 0) return Change.failed();
                 try (PreparedStatement statement = connection.prepareStatement(
                         "INSERT INTO player_levels (uuid, experience) VALUES (?, ?) "
                                 + "ON CONFLICT(uuid) DO UPDATE SET experience = excluded.experience")) {
                     statement.setString(1, playerId.toString());
-                    statement.setDouble(2, updated);
+                    statement.setString(2, updated.toString());
                     statement.executeUpdate();
                 }
                 return new Change(previous, updated, true);
@@ -81,12 +97,14 @@ final class PlayerLevelRepository {
         }
     }
 
-    private double read(java.sql.Connection connection, UUID playerId) throws SQLException {
+    private BigDecimal read(java.sql.Connection connection, UUID playerId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "SELECT experience FROM player_levels WHERE uuid = ?")) {
             statement.setString(1, playerId.toString());
             try (ResultSet resultSet = statement.executeQuery()) {
-                return resultSet.next() ? resultSet.getDouble("experience") : 0.0;
+                if (!resultSet.next()) return BigDecimal.ZERO;
+                String value = resultSet.getString("experience");
+                return value == null || value.isBlank() ? BigDecimal.ZERO : new BigDecimal(value);
             }
         }
     }
@@ -96,19 +114,19 @@ final class PlayerLevelRepository {
     }
 
     static final class Change {
-        private final double previous;
-        private final double current;
+        private final BigDecimal previous;
+        private final BigDecimal current;
         private final boolean successful;
 
-        private Change(double previous, double current, boolean successful) {
+        private Change(BigDecimal previous, BigDecimal current, boolean successful) {
             this.previous = previous;
             this.current = current;
             this.successful = successful;
         }
 
-        static Change failed() { return new Change(0.0, 0.0, false); }
-        double previous() { return previous; }
-        double current() { return current; }
+        static Change failed() { return new Change(BigDecimal.ZERO, BigDecimal.ZERO, false); }
+        BigDecimal previous() { return previous; }
+        BigDecimal current() { return current; }
         boolean successful() { return successful; }
     }
 }

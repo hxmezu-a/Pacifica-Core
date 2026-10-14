@@ -9,6 +9,7 @@ import com.districtx.pacificacore.api.LevelRewardService;
 import com.districtx.pacificacore.api.LevelRewardType;
 import com.districtx.pacificacore.api.PlayerLevelService;
 import com.districtx.pacificacore.api.RewardResult;
+import com.districtx.pacificacore.level.LevelDisplayFormatter;
 import com.districtx.pacificacore.api.event.LevelRewardGrantEvent;
 import com.districtx.pacificacore.storage.DatabaseManager;
 import com.districtx.pacificacore.storage.LevelRewardClaimRepository;
@@ -165,7 +166,7 @@ public final class LevelRewardManager implements LevelRewardService {
         String message = plugin.getLevelRewardsConfig().getString("rewards.messages." + status, "");
         if (message == null || message.isBlank()) return;
         message = message.replace("%player%", player.getName())
-                .replace("%level%", String.valueOf(context.getLevel()))
+                .replace("%level%", LevelDisplayFormatter.format(plugin, context.getLevel()))
                 .replace("%reward%", reward.getId())
                 .replace("%type%", reward.getType().name());
         player.sendMessage(ChatColor.translateAlternateColorCodes('&', message));

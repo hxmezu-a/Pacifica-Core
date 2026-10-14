@@ -6,6 +6,7 @@ import com.districtx.pacificacore.api.ExperienceSource;
 import com.districtx.pacificacore.api.PlayerLevelService;
 import com.districtx.pacificacore.command.AdminSubCommand;
 import com.districtx.pacificacore.level.ExperienceFormatter;
+import com.districtx.pacificacore.level.LevelDisplayFormatter;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
@@ -94,7 +95,8 @@ public final class PlayerLevelCommand implements CommandExecutor, AdminSubComman
                 return send(sender, "invalid-level", Map.of());
             }
             if (!levels.setLevel(target.getUniqueId(), level)) return send(sender, "invalid-level", Map.of());
-            return send(sender, "level-up", Map.of("player", targetName, "level", String.valueOf(level)));
+            return send(sender, "level-up", Map.of("player", targetName,
+                    "level", LevelDisplayFormatter.format(plugin, level)));
         }
         double amount;
         try {
@@ -127,7 +129,7 @@ public final class PlayerLevelCommand implements CommandExecutor, AdminSubComman
         double experience = levels.getExperience(playerId);
         double progress = levels.getProgressToNextLevel(playerId);
         java.util.Map<String, String> values = new java.util.HashMap<>();
-        values.put("level", String.valueOf(levels.getLevel(playerId)));
+        values.put("level", LevelDisplayFormatter.format(plugin, levels.getLevel(playerId)));
         values.put("exp", format(experience));
         values.put("progress", String.valueOf(Math.round(progress * 100.0)));
         values.put("exp_to_next_level", format(levels.getExperienceToNextLevel(playerId)));

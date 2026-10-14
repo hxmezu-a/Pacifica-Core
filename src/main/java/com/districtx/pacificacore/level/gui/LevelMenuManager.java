@@ -10,6 +10,7 @@ import com.districtx.pacificacore.api.PlayerLevelService;
 import com.districtx.pacificacore.api.PrestigeService;
 import com.districtx.pacificacore.api.RankExperienceBonusService;
 import com.districtx.pacificacore.level.ExperienceFormatter;
+import com.districtx.pacificacore.level.LevelDisplayFormatter;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -86,10 +87,12 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
     @Override
     public void openProgressionMenu(Player player, int page) {
         if (player == null) return;
-        int safePage = Math.max(1, Math.min(5, page));
+        int maximumPage = maximumProgressionPage(player);
+        int safePage = Math.max(1, Math.min(maximumPage, page));
         Inventory inventory = createInventory(player, "PROGRESSION", safePage,
-                plugin.getLevelConfig().getString("gui.progression.title", "&6&lLevel Progression &7- &e%page%/5")
-                        .replace("%page%", String.valueOf(safePage)),
+                plugin.getLevelConfig().getString("gui.progression.title", "&6&lLevel Progression &7- &e%page%/%pages%")
+                        .replace("%page%", String.valueOf(safePage))
+                        .replace("%pages%", String.valueOf(maximumPage)),
                 plugin.getLevelConfig().getInt("gui.progression.rows", 6));
         fill(inventory, "gui.items.empty");
         fillSlots(inventory, parseSlots("gui.progression.border.white.slots",
@@ -116,7 +119,7 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
                 text("gui.progression.navigation.previous-name", "&e&lPrevious Page"),
                 replace(plugin.getLevelConfig().getStringList("gui.progression.navigation.previous-lore"),
                         Map.of("page", String.valueOf(safePage - 1))), Map.of());
-        if (safePage < 5) set(inventory, nextSlot,
+        if (safePage < maximumPage) set(inventory, nextSlot,
                 material("gui.progression.navigation.material", "ARROW"),
                 text("gui.progression.navigation.next-name", "&e&lNext Page"),
                 replace(plugin.getLevelConfig().getStringList("gui.progression.navigation.next-lore"),
@@ -144,11 +147,21 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
 
     @Override
     public OptionalInt getLevelForSlot(int page, int slot) {
-        if (page < 1 || page > 5) return OptionalInt.empty();
+        if (page < 1) return OptionalInt.empty();
         for (int index = 0; index < LEVEL_SLOTS.length; index++) {
-            if (LEVEL_SLOTS[index] == slot) return OptionalInt.of((page - 1) * 20 + index + 1);
+            if (LEVEL_SLOTS[index] == slot) {
+                long level = ((long) page - 1) * LEVEL_SLOTS.length + index + 1;
+                return level <= Integer.MAX_VALUE ? OptionalInt.of((int) level) : OptionalInt.empty();
+            }
         }
         return OptionalInt.empty();
+    }
+
+    private int maximumProgressionPage(Player player) {
+        int configuredPages = Math.max(1, plugin.getLevelConfig().getInt("gui.progression.pages", 5));
+        long currentLevel = Math.max(1, levels.getLevel(player.getUniqueId()));
+        long currentLevelPage = (currentLevel - 1) / LEVEL_SLOTS.length + 1;
+        return (int) Math.max(configuredPages, Math.min(Integer.MAX_VALUE, currentLevelPage));
     }
 
     @EventHandler
@@ -185,7 +198,8 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
         if (slot == configuredSlot("gui.progression.back.slot", 47, 54)) openMainMenu(player);
         else if (slot == configuredSlot("gui.progression.navigation.previous-slot", 48, 54) && page > 1) {
             openProgressionMenu(player, page - 1);
-        } else if (slot == configuredSlot("gui.progression.navigation.next-slot", 51, 54) && page < 5) {
+        } else if (slot == configuredSlot("gui.progression.navigation.next-slot", 51, 54)
+                && page < maximumProgressionPage(player)) {
             openProgressionMenu(player, page + 1);
         }
     }
@@ -212,7 +226,7 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
         double levelRequirement = progression.getExperienceRequiredForNextLevel(displayedLevel);
         Map<String, String> values = new java.util.HashMap<>();
         values.put("level", String.valueOf(displayedLevel));
-        values.put("player_level", String.valueOf(currentLevel));
+        values.put("player_level", LevelDisplayFormatter.format(plugin, currentLevel));
         values.put("level_progression", format(levels.getProgressToNextLevel(playerId) * 100.0));
         values.put("total_xp_needed", format(progression.getTotalExperienceRequiredForLevel(displayedLevel)));
         values.put("xp_progression", format(xpIntoLevel));
@@ -254,8 +268,8 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
         UUID playerId = player.getUniqueId();
         int level = levels.getLevel(playerId);
         Map<String, String> values = new java.util.HashMap<>();
-        values.put("level", String.valueOf(level));
-        values.put("player_level", String.valueOf(level));
+        values.put("level", LevelDisplayFormatter.format(plugin, level));
+        values.put("player_level", LevelDisplayFormatter.format(plugin, level));
         values.put("level_progression", format(levels.getProgressToNextLevel(playerId) * 100.0));
         values.put("total_xp_needed", format(levels.getExperienceRequiredForLevel(level + 1)));
         values.put("xp_progression", format(levels.getProgression().getExperienceIntoCurrentLevel(
@@ -278,7 +292,8 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
         int rows = Math.max(1, Math.min(6, requestedRows));
         LevelMenuHolder holder = new LevelMenuHolder(menu, page);
         Inventory inventory = Bukkit.createInventory(holder, rows * 9, color(apply(title,
-                Map.of("level", String.valueOf(levels.getLevel(player.getUniqueId())), "page", String.valueOf(page)))));
+                Map.of("level", LevelDisplayFormatter.format(plugin, levels.getLevel(player.getUniqueId())),
+                        "page", String.valueOf(page)))));
         holder.setInventory(inventory);
         return inventory;
     }
@@ -327,16 +342,7 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
     }
 
     private String levelColor(int level) {
-        for (Map<?, ?> range : plugin.getLevelConfig().getMapList("level-colors")) {
-            Object minimum = range.get("min-level");
-            Object maximum = range.get("max-level");
-            if (minimum instanceof Number min && maximum instanceof Number max
-                    && level >= min.intValue() && level <= max.intValue()) {
-                Object color = range.get("color");
-                return color == null ? "&7" : String.valueOf(color);
-            }
-        }
-        return "&7";
+        return LevelDisplayFormatter.colorPrefix(plugin, level);
     }
 
     private int configuredSlot(String path, int fallback, int size) {

@@ -78,6 +78,28 @@ public final class CurrencyStorage {
         return setBalance(player, BigDecimal.ZERO);
     }
 
+    public synchronized boolean depositToBank(UUID player, BigDecimal amount, BankingRepository banking) {
+        if (!validBankTransaction(player, amount)) return false;
+        BankingRepository.BalanceUpdate result = banking.depositFromBalance(player, amount);
+        if (result == null) return false;
+        balances.put(player, result.serverBalance());
+        return true;
+    }
+
+    public synchronized boolean withdrawFromBank(UUID player, BigDecimal amount, BankingRepository banking) {
+        if (!validBankTransaction(player, amount)) return false;
+        BankingRepository.BalanceUpdate result = banking.withdrawToBalance(player, amount);
+        if (result == null) return false;
+        balances.put(player, result.serverBalance());
+        return true;
+    }
+
+    public synchronized boolean transferBank(UUID sender, UUID recipient, BigDecimal amount,
+                                             BankingRepository banking) {
+        return validBankTransaction(sender, amount) && validPlayer(recipient)
+                && !sender.equals(recipient) && banking.transfer(sender, recipient, amount);
+    }
+
     public synchronized boolean transfer(UUID from, UUID to, BigDecimal diamondAmount, BigDecimal balanceAmount) {
         if (!validPlayer(from) || !validPlayer(to) || !validAmount(diamondAmount)
                 || !validAmount(balanceAmount) || !hasDiamond(from, diamondAmount)
@@ -150,5 +172,11 @@ public final class CurrencyStorage {
 
     private boolean validPlayer(UUID player) {
         return player != null;
+    }
+
+    private boolean validBankTransaction(UUID player, BigDecimal amount) {
+        if (!validPlayer(player) || amount == null || amount.signum() <= 0) return false;
+        BigDecimal normalized = amount.stripTrailingZeros();
+        return normalized.scale() <= 8 && normalized.precision() - normalized.scale() <= 38;
     }
 }

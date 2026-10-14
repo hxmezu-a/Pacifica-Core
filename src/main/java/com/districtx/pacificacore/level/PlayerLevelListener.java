@@ -9,6 +9,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerExpChangeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
@@ -71,6 +72,14 @@ public final class PlayerLevelListener implements Listener {
         Player player = event.getPlayer();
         rewardedDeaths.remove(player.getUniqueId());
         plugin.getServer().getScheduler().runTask(plugin, () -> playerLevels.refreshPlayer(player));
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onExperienceChange(PlayerExpChangeEvent event) {
+        Player player = event.getPlayer();
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            if (player.isOnline()) playerLevels.refreshExperienceDisplay(player);
+        });
     }
 
     @EventHandler

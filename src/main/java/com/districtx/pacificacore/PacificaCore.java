@@ -16,19 +16,26 @@ import com.districtx.pacificacore.api.ShopAccessService;
 import com.districtx.pacificacore.api.SpawnShopService;
 import com.districtx.pacificacore.api.SpawnShopNpcLinkService;
 import com.districtx.pacificacore.api.NpcLinkService;
+import com.districtx.pacificacore.api.BankingService;
 import com.districtx.pacificacore.api.SpawnShopSlotService;
 import com.districtx.pacificacore.command.SpawnShopCommand;
 import com.districtx.pacificacore.command.SpawnShopAdminCommand;
 import com.districtx.pacificacore.command.AdminCommand;
 import com.districtx.pacificacore.command.CoreAdminCommand;
 import com.districtx.pacificacore.command.CurrencyAdminSubCommand;
+import com.districtx.pacificacore.command.BankingAdminSubCommand;
+import com.districtx.pacificacore.command.BankCommand;
+import com.districtx.pacificacore.bank.BankingGuiManager;
 import com.districtx.pacificacore.shop.SpawnShopManager;
 import com.districtx.pacificacore.shop.SpawnShopGuiManager;
 import com.districtx.pacificacore.command.PlayerLevelCommand;
 import com.districtx.pacificacore.economy.DiamondCurrencyServiceImpl;
 import com.districtx.pacificacore.economy.EconomyServiceImpl;
+import com.districtx.pacificacore.economy.BankingServiceImpl;
+import com.districtx.pacificacore.economy.MoneyFormatter;
 import com.districtx.pacificacore.economy.TransactionServiceImpl;
 import com.districtx.pacificacore.storage.CurrencyStorage;
+import com.districtx.pacificacore.storage.BankingRepository;
 import com.districtx.pacificacore.storage.DatabaseManager;
 import com.districtx.pacificacore.storage.PlayerLevelManager;
 import com.districtx.pacificacore.storage.DailyExperienceRepository;
@@ -64,14 +71,12 @@ import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.math.BigDecimal;
-import java.text.NumberFormat;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 import java.util.List;
-import java.util.Locale;
 
 public final class PacificaCore extends JavaPlugin implements CommandExecutor {
     private static PacificaCore instance;
@@ -97,6 +102,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
     private NpcLinkManager npcLinks;
     private SpawnShopNpcLinkManager spawnShopNpcLinks;
     private SpawnShopManager spawnShops;
+    private BankingServiceImpl banking;
 
     public static PacificaCore getInstance() { return instance; }
     public static PacificaCoreAPI getAPI() { return instance == null ? null : instance.api; }
@@ -137,6 +143,10 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         getServer().getPluginManager().registerEvents(spawnShopGuis, this);
         npcLinks = new NpcLinkManager(this, database);
         spawnShopNpcLinks = new SpawnShopNpcLinkManager(this, database, npcLinks);
+        BankingGuiManager bankingMenus = new BankingGuiManager(this, economy);
+        banking = new BankingServiceImpl(this, storage, new BankingRepository(this, database), bankingMenus);
+        bankingMenus.setBankingService(banking);
+        getServer().getPluginManager().registerEvents(bankingMenus, this);
         TransactionService transactions = new TransactionServiceImpl(storage);
         levelRewards = new LevelRewardManager(this, database, playerLevels, economy, diamonds);
         playerLevels.setRewardService(levelRewards);
@@ -150,7 +160,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         advancementNotifications = new AdvancementNotificationManager(this);
         getServer().getPluginManager().registerEvents(advancementNotifications, this);
         api = new PacificaCoreAPIImpl(diamonds, economy, transactions, playerLevels, levelRewards,
-                dailyExperience, prestige, rankBonuses, levelMenus, advancementNotifications, npcLinks);
+                dailyExperience, prestige, rankBonuses, levelMenus, advancementNotifications, npcLinks, banking);
         blackMarket = new BlackMarketManager(this, database, economy);
         getServer().getPluginManager().registerEvents(blackMarket, this);
         getServer().getPluginManager().registerEvents(levelMenus, this);
@@ -169,6 +179,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         getServer().getServicesManager().register(PacificaCoreAPI.class, api, this, ServicePriority.Normal);
         getServer().getServicesManager().register(SpawnShopService.class, spawnShops, this, ServicePriority.Normal);
         getServer().getServicesManager().register(NpcLinkService.class, npcLinks, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(BankingService.class, banking, this, ServicePriority.Normal);
         getServer().getServicesManager().register(SpawnShopNpcLinkService.class, spawnShopNpcLinks, this, ServicePriority.Normal);
         getServer().getServicesManager().register(SpawnShopSlotService.class, spawnShops, this, ServicePriority.Normal);
         getServer().getServicesManager().register(ShopAccessService.class, spawnShops, this, ServicePriority.Normal);
@@ -179,11 +190,13 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         getCommand("bal").setExecutor(this);
         getCommand("bm").setExecutor(blackMarket);
         getCommand("spawnshop").setExecutor(new SpawnShopCommand(this, spawnShopGuis));
+        getCommand("bank").setExecutor(new BankCommand(banking));
         SpawnShopAdminCommand spawnShopAdminCommand = new SpawnShopAdminCommand(this, spawnShops,
                 npcLinks, spawnShopNpcLinks);
         PlayerLevelCommand levelCommand = new PlayerLevelCommand(this);
         getCommand("level").setExecutor(levelCommand);
         AdminCommand adminCommand = new AdminCommand(List.of(blackMarket, spawnShopAdminCommand,
+                new BankingAdminSubCommand(npcLinks),
                 new CoreAdminCommand(this), new CurrencyAdminSubCommand(this, "diamonds", true),
                 new CurrencyAdminSubCommand(this, "balance", false), levelCommand));
         getCommand("adminpc").setExecutor(adminCommand);
@@ -210,6 +223,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         if (spawnShopNpcLinks != null) spawnShopNpcLinks.shutdown();
         unregisterPlayerLevelPlaceholderExpansion();
         if (blackMarket != null) blackMarket.close();
+        if (banking != null) banking.close();
         if (database != null) database.close();
         instance = null;
     }
@@ -256,7 +270,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
     }
 
     private String format(BigDecimal amount) {
-        return NumberFormat.getNumberInstance(Locale.US).format(amount);
+        return MoneyFormatter.format(amount);
     }
 
     public OfflinePlayer findOfflinePlayer(String name) {

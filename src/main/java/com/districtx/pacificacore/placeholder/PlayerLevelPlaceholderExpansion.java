@@ -4,6 +4,7 @@ import com.districtx.pacificacore.PacificaCore;
 import com.districtx.pacificacore.api.PlayerLevelService;
 import com.districtx.pacificacore.api.ExperienceSource;
 import com.districtx.pacificacore.level.ExperienceFormatter;
+import com.districtx.pacificacore.level.LevelDisplayFormatter;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 
@@ -44,10 +45,10 @@ public final class PlayerLevelPlaceholderExpansion extends PlaceholderExpansion 
         }) {
             double experience = levels.getExperience(playerId);
             var progression = levels.getProgression();
-            int level = progression.getLevel(experience);
+            int level = levels.getLevel(playerId);
             double progress = progression.getProgressToNextLevel(experience);
             return switch (placeholder) {
-                case "level", "level_current" -> String.valueOf(level);
+                case "level", "level_current" -> LevelDisplayFormatter.format(plugin, level);
                 case "exp", "experience" -> ExperienceFormatter.formatXp(experience);
                 case "exp_to_next_level" -> ExperienceFormatter.formatXp(progression.getExperienceToNextLevel(experience));
                 case "level_progress" -> String.format(Locale.US, "%.2f", progress);
@@ -74,7 +75,7 @@ public final class PlayerLevelPlaceholderExpansion extends PlaceholderExpansion 
 
     private String defaultValue(String params) {
         return switch (params.toLowerCase(Locale.ROOT)) {
-            case "level", "level_current" -> "1";
+            case "level", "level_current" -> LevelDisplayFormatter.format(plugin, 1);
             case "level_max" -> plugin.getLevelConfig().getString("placeholders.infinite-level-max", "∞");
             case "exp", "experience", "exp_to_next_level", "exp_required", "daily_xp", "daily_xp_price",
                     "rank_xp_bonus" -> "0.0";

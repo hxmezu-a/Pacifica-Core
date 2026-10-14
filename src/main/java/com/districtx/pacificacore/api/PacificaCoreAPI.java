@@ -34,4 +34,7 @@ public interface PacificaCoreAPI {
 
     /** Gets the identifier-only service for linking features to external NPCs. */
     default NpcLinkService getNpcLinkService() { return null; }
+
+    /** Gets the public banking service, or null when unavailable. */
+    default BankingService getBankingService() { return null; }
 }

@@ -96,7 +96,24 @@ public final class DatabaseManager implements AutoCloseable {
         player(connection -> {
             try (Statement statement = connection.createStatement()) {
                 statement.executeUpdate("CREATE TABLE IF NOT EXISTS player_levels ("
-                        + "uuid TEXT PRIMARY KEY, experience REAL NOT NULL DEFAULT 0.0)");
+                        + "uuid TEXT PRIMARY KEY, experience TEXT NOT NULL DEFAULT '0.0')");
+                boolean textExperience = false;
+                try (ResultSet columns = statement.executeQuery("PRAGMA table_info(player_levels)")) {
+                    while (columns.next()) {
+                        if ("experience".equalsIgnoreCase(columns.getString("name"))) {
+                            textExperience = "TEXT".equalsIgnoreCase(columns.getString("type"));
+                            break;
+                        }
+                    }
+                }
+                if (!textExperience) {
+                    statement.executeUpdate("ALTER TABLE player_levels RENAME TO player_levels_legacy");
+                    statement.executeUpdate("CREATE TABLE player_levels ("
+                            + "uuid TEXT PRIMARY KEY, experience TEXT NOT NULL DEFAULT '0.0')");
+                    statement.executeUpdate("INSERT INTO player_levels (uuid, experience) "
+                            + "SELECT uuid, CAST(experience AS TEXT) FROM player_levels_legacy");
+                    statement.executeUpdate("DROP TABLE player_levels_legacy");
+                }
                 statement.executeUpdate("CREATE TABLE IF NOT EXISTS player_level_reward_claims ("
                         + "uuid TEXT NOT NULL, reward_id TEXT NOT NULL, claimed_at INTEGER NOT NULL, "
                         + "PRIMARY KEY (uuid, reward_id))");
@@ -120,6 +137,17 @@ public final class DatabaseManager implements AutoCloseable {
                 statement.executeUpdate("CREATE TABLE IF NOT EXISTS economy_balances ("
                         + "uuid TEXT PRIMARY KEY, player_name TEXT NOT NULL, "
                         + "balance TEXT NOT NULL DEFAULT '0')");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS bank_accounts ("
+                        + "player_uuid TEXT PRIMARY KEY, bank_balance TEXT NOT NULL DEFAULT '0', "
+                        + "created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS bank_transactions ("
+                        + "transaction_id TEXT PRIMARY KEY, transaction_type TEXT NOT NULL, "
+                        + "source_uuid TEXT NOT NULL, recipient_uuid TEXT, amount TEXT NOT NULL, "
+                        + "created_at INTEGER NOT NULL, status TEXT NOT NULL)");
+                statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_bank_transactions_source "
+                        + "ON bank_transactions(source_uuid, created_at)");
+                statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_bank_transactions_recipient "
+                        + "ON bank_transactions(recipient_uuid, created_at)");
             }
             return null;
         });

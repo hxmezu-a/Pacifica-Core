@@ -30,6 +30,8 @@ commands:
     permission: pacifica.level.command
   spawnshop:
     description: Open the Spawn Shop
+  bank:
+    description: Open your Pacifica bank account
 permissions:
   pacifica.admin:
     default: op
@@ -40,6 +42,7 @@ permissions:
       pacifica.admin.diamonds: true
       pacifica.admin.balance: true
       pacifica.admin.level: true
+      pacifica.admin.bank: true
   pacifica.admin.bm:
     default: false
     children:
@@ -71,6 +74,8 @@ permissions:
     default: false
     children:
       pacifica.level.admin: true
+  pacifica.admin.bank:
+    default: op
   pacifica.core.command.diamond:
     default: true
   pacifica.core.command.balance:

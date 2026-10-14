@@ -136,7 +136,7 @@ gui:
         material: BLACK_STAINED_GLASS_PANE
         name: '&7'
   progression:
-    title: '&6&lLevel Progression &7- &e%page%/5'
+    title: '&6&lLevel Progression &7- &e%page%/%pages%'
     rows: 6
     pages: 5
     levels-per-page: 20
@@ -202,7 +202,7 @@ gui:
       name: '&e&lProgression Leveling'
       lore:
         - '&7'
-        - '&2> &fView the first &6100 levels&f,'
+        - '&2> &fBrowse the &6level progression&f,'
         - '&2> &fUnlock &6attachments&f, &6backpack slots&f,'
         - '&2> &fearn &bdiamonds &fand more!'
         - '&7'

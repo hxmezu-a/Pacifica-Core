@@ -8,7 +8,7 @@ import java.util.OptionalInt;
 public interface LevelMenuService {
     /** Opens the main six-row Level menu. */
     void openMainMenu(Player player);
-    /** Opens one of the five permanent 1-100 progression pages. */
+    /** Opens a progression page, extending as needed to include the player's current level. */
     void openProgressionMenu(Player player, int page);
     /** Opens the separate Prestige menu when unlocked. */
     void openPrestigeMenu(Player player);

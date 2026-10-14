@@ -1,6 +1,7 @@
 package com.districtx.pacificacore.market;
 
 import com.districtx.pacificacore.api.EconomyService;
+import com.districtx.pacificacore.economy.MoneyFormatter;
 import com.districtx.pacificacore.PacificaCore;
 import com.districtx.pacificacore.command.AdminSubCommand;
 import com.districtx.pacificacore.storage.BlackMarketRepository;
@@ -349,7 +350,7 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
             int quantity = Math.min(quantities[i], offer.getRemainingQuantity());
             inventory.setItem(i + 11, item(i == 4 ? material("WRITABLE_BOOK") : Material.PAPER,
                     buying ? "&aSell &e" + (i == 4 ? "All" : quantity + "x") : "&aPurchase &e" + (i == 4 ? "All" : quantity + "x"),
-                    "&7", "&7Cost per: &a$" + offer.getPrice(), "&7Total Cost: &a$" + offer.getPrice().multiply(BigDecimal.valueOf(quantity))));
+                    "&7", "&7Cost per: &a$" + MoneyFormatter.format(offer.getPrice()), "&7Total Cost: &a$" + MoneyFormatter.format(offer.getPrice().multiply(BigDecimal.valueOf(quantity)))));
         }
         player.openInventory(inventory);
     }
@@ -366,13 +367,13 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
         inventory.setItem(0, item(Material.REDSTONE, "&c&lBack"));
         inventory.setItem(4, displayOffer(offer));
         BigDecimal current = offer.getHighestBidder() == null ? offer.getMinimumBid() : offer.getReservedFunds();
-        inventory.setItem(13, item(Material.GOLD_INGOT, "&6&lPlace Bid", "&7Minimum bid: &a$" + current,
+        inventory.setItem(13, item(Material.GOLD_INGOT, "&6&lPlace Bid", "&7Minimum bid: &a$" + MoneyFormatter.format(current),
                 "&7Enter an amount greater than the current bid."));
         player.openInventory(inventory);
     }
 
     private void openBidInput(Player player, MarketHolder state) {
-        new AnvilGUI.Builder().plugin(plugin).title("Set your bid").text("null")
+        new AnvilGUI.Builder().plugin(plugin).title(color("&7&lPlace your bid")).text("§7")
                 .onClick((slot, snapshot) -> {
                     if (slot != AnvilGUI.Slot.OUTPUT) return Collections.emptyList();
                     try {
@@ -513,7 +514,7 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
     }
 
     private void openNumberInput(Player player, MarketHolder state, boolean quantity) {
-        new AnvilGUI.Builder().plugin(plugin).title(quantity ? "Set the quantity" : "Set the per price")
+        new AnvilGUI.Builder().plugin(plugin).title(color(quantity ? "&7&lSet the quantity" : "&7&lSet the per price"))
                 .text(quantity ? String.valueOf(Math.max(1, state.quantity)) : state.price.toPlainString())
                 .onClick((slot, snapshot) -> {
                     if (slot != AnvilGUI.Slot.OUTPUT) return Collections.emptyList();
@@ -680,8 +681,9 @@ public final class BlackMarketManager implements CommandExecutor, Listener, Auto
         lore.add(color(buying ? "&a&lBuying" : auction ? "&6&lAuction" : "&c&lSelling"));
         lore.add(color("&7Item #" + offer.getCategory().name() + "_" + offer.getId().toString().substring(0, 8)));
         lore.add(color("&7Quantity: &e" + offer.getRemainingQuantity()));
-        lore.add(color("&7Price (each): &a$" + offer.getPrice()));
-        if (auction) lore.add(color("&7Highest bid: &a$" + (offer.getHighestBidder() == null ? offer.getMinimumBid() : offer.getReservedFunds())));
+        lore.add(color("&7Price (each): &a$" + MoneyFormatter.format(offer.getPrice())));
+        if (auction) lore.add(color("&7Highest bid: &a$" + MoneyFormatter.format(
+                offer.getHighestBidder() == null ? offer.getMinimumBid() : offer.getReservedFunds())));
         lore.add(color("&7Expires: &a" + duration(offer.getExpiresAt() - System.currentTimeMillis())));
         meta.setLore(lore);
         meta.getPersistentDataContainer().set(offerKey, org.bukkit.persistence.PersistentDataType.STRING, offer.getId().toString());
