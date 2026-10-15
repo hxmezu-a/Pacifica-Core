@@ -4,10 +4,10 @@ leveling:
   minimum-level: 1
   progression:
     base-xp: 100.0
-    growth-rate: 1.25
+    growth-rate: 0.25
   xp-sources:
-    player-kill: 3.0
-    pvp-death: 1.0
+    player-kill: 40.0
+    pvp-death: 15.0
   integrations:
     loot-system: true
     placeholder-api: true
