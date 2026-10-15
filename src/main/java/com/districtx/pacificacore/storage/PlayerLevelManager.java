@@ -64,7 +64,8 @@ public final class PlayerLevelManager implements PlayerLevelService {
         double baseExperience = plugin.getLevelConfig().getDouble("leveling.progression.base-xp", 100.0);
         if (!Double.isFinite(baseExperience) || baseExperience <= 0.0) baseExperience = 100.0;
         double growthRate = plugin.getLevelConfig().getDouble("leveling.progression.growth-rate", 1.25);
-        if (!Double.isFinite(growthRate) || growthRate <= 1.0) growthRate = 1.25;
+        if (!Double.isFinite(growthRate) || growthRate <= 0.0) growthRate = 0.25;
+        else if (growthRate < 1.0) growthRate += 1.0;
         if (!plugin.getLevelConfig().getBoolean("leveling.infinite-levels", true)) {
             plugin.getLogger().warning("Finite level caps are no longer supported; Player Level remains unlimited.");
         }

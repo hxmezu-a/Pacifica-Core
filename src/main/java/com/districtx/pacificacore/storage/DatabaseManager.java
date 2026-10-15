@@ -13,7 +13,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 public final class DatabaseManager implements AutoCloseable {
     @FunctionalInterface
@@ -22,6 +24,8 @@ public final class DatabaseManager implements AutoCloseable {
     }
 
     private final JavaPlugin plugin;
+    private final ThreadLocal<Map<Connection, Integer>> activeTransactions =
+            ThreadLocal.withInitial(IdentityHashMap::new);
     private Connection levelConnection;
     private Connection currencyConnection;
     private Connection spawnShopConnection;
@@ -352,22 +356,69 @@ public final class DatabaseManager implements AutoCloseable {
 
     private <T> T transaction(Connection connection, SqlOperation<T> operation) throws SQLException {
         if (connection == null || connection.isClosed()) throw new SQLException("Database connection is closed.");
-        boolean autoCommit = connection.getAutoCommit();
-        connection.setAutoCommit(false);
+        Map<Connection, Integer> active = activeTransactions.get();
+        Integer depth = active.get(connection);
+        if (depth != null) return nestedTransaction(connection, operation, depth);
+        if (!connection.getAutoCommit()) {
+            throw new SQLException("Database connection is already in manual-commit mode.");
+        }
+        executeTransactionCommand(connection, "BEGIN");
+        active.put(connection, 1);
         try {
             T result = operation.execute(connection);
-            connection.commit();
+            executeTransactionCommand(connection, "COMMIT");
             return result;
-        } catch (SQLException | RuntimeException exception) {
-            try {
-                connection.rollback();
-            } catch (SQLException rollbackException) {
-                exception.addSuppressed(rollbackException);
-            }
-            if (exception instanceof SQLException sqlException) throw sqlException;
+        } catch (SQLException | RuntimeException | Error exception) {
+            rollback(connection, exception);
             throw exception;
         } finally {
-            connection.setAutoCommit(autoCommit);
+            active.remove(connection);
+            if (active.isEmpty()) activeTransactions.remove();
+        }
+    }
+
+    private <T> T nestedTransaction(Connection connection, SqlOperation<T> operation, int depth)
+            throws SQLException {
+        String savepoint = "pacifica_core_nested_" + depth;
+        executeTransactionCommand(connection, "SAVEPOINT " + savepoint);
+        Map<Connection, Integer> active = activeTransactions.get();
+        active.put(connection, depth + 1);
+        try {
+            T result = operation.execute(connection);
+            executeTransactionCommand(connection, "RELEASE SAVEPOINT " + savepoint);
+            return result;
+        } catch (SQLException | RuntimeException | Error exception) {
+            rollbackToSavepoint(connection, savepoint, exception);
+            try {
+                executeTransactionCommand(connection, "RELEASE SAVEPOINT " + savepoint);
+            } catch (SQLException releaseException) {
+                exception.addSuppressed(releaseException);
+            }
+            throw exception;
+        } finally {
+            active.put(connection, depth);
+        }
+    }
+
+    private void rollback(Connection connection, Throwable failure) {
+        try {
+            executeTransactionCommand(connection, "ROLLBACK");
+        } catch (SQLException rollbackException) {
+            failure.addSuppressed(rollbackException);
+        }
+    }
+
+    private void rollbackToSavepoint(Connection connection, String savepoint, Throwable failure) {
+        try {
+            executeTransactionCommand(connection, "ROLLBACK TO SAVEPOINT " + savepoint);
+        } catch (SQLException rollbackException) {
+            failure.addSuppressed(rollbackException);
+        }
+    }
+
+    private void executeTransactionCommand(Connection connection, String command) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute(command);
         }
     }
 

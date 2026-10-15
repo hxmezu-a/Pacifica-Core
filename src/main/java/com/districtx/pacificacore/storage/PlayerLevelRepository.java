@@ -7,6 +7,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.math.BigDecimal;
 import java.util.UUID;
+import java.util.logging.Level;
 import java.util.function.UnaryOperator;
 
 final class PlayerLevelRepository {
@@ -110,7 +111,7 @@ final class PlayerLevelRepository {
     }
 
     private void logFailure(String operation, Exception exception) {
-        plugin.getLogger().severe("Could not " + operation + ": " + exception.getMessage());
+        plugin.getLogger().log(Level.SEVERE, "Could not " + operation + ".", exception);
     }
 
     static final class Change {
