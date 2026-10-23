@@ -40,13 +40,16 @@ public final class PlayerLevelPlaceholderExpansion extends PlaceholderExpansion 
         String placeholder = params.toLowerCase(Locale.ROOT);
         if (switch (placeholder) {
             case "level", "level_current", "exp", "experience", "exp_to_next_level", "level_progress",
-                    "level_progress_percent", "exp_required" -> true;
+                    "level_progress_percent", "exp_required", "exp_total_required", "total_exp_required",
+                    "rankupxpcurrent", "rankupxpneeded", "rankupxpstatus" -> true;
             default -> false;
         }) {
             double experience = levels.getExperience(playerId);
             var progression = levels.getProgression();
             int level = levels.getLevel(playerId);
             double progress = progression.getProgressToNextLevel(experience);
+            String rankUpCurrent = ExperienceFormatter.formatXp(levels.getCurrentLevelExperience(playerId).doubleValue());
+            String rankUpNeeded = ExperienceFormatter.formatXp(progression.getExperienceRequiredForNextLevel(level));
             return switch (placeholder) {
                 case "level", "level_current" -> LevelDisplayFormatter.format(plugin, level);
                 case "exp", "experience" -> ExperienceFormatter.formatXp(experience);
@@ -55,11 +58,17 @@ public final class PlayerLevelPlaceholderExpansion extends PlaceholderExpansion 
                 case "level_progress_percent" -> String.valueOf(Math.round(progress * 100.0));
                 case "exp_required" -> ExperienceFormatter.formatXp(
                         progression.getExperienceRequiredForNextLevel(level));
+                case "exp_total_required", "total_exp_required" -> ExperienceFormatter.formatXp(
+                        progression.getTotalExperienceRequiredForLevel(level));
+                case "rankupxpcurrent" -> rankUpCurrent;
+                case "rankupxpneeded" -> rankUpNeeded;
+                case "rankupxpstatus" -> level >= levels.getMaximumLevel() ? "Complete"
+                        : "(" + rankUpCurrent + " / " + rankUpNeeded + ")";
                 default -> null;
             };
         }
         return switch (placeholder) {
-            case "level_max" -> plugin.getLevelConfig().getString("placeholders.infinite-level-max", "∞");
+            case "level_max" -> String.valueOf(levels.getMaximumLevel());
             case "daily_xp" -> ExperienceFormatter.formatXp(
                     plugin.getAPI().getDailyExperienceService().getExperienceAmount(playerId));
             case "daily_xp_price" -> ExperienceFormatter.formatPrice(
@@ -76,9 +85,11 @@ public final class PlayerLevelPlaceholderExpansion extends PlaceholderExpansion 
     private String defaultValue(String params) {
         return switch (params.toLowerCase(Locale.ROOT)) {
             case "level", "level_current" -> LevelDisplayFormatter.format(plugin, 1);
-            case "level_max" -> plugin.getLevelConfig().getString("placeholders.infinite-level-max", "∞");
+            case "level_max" -> String.valueOf(plugin.getAPI().getPlayerLevelService().getMaximumLevel());
             case "exp", "experience", "exp_to_next_level", "exp_required", "daily_xp", "daily_xp_price",
-                    "rank_xp_bonus" -> "0.0";
+                    "rank_xp_bonus", "exp_total_required", "total_exp_required", "rankupxpcurrent",
+                    "rankupxpneeded" -> "0.0";
+            case "rankupxpstatus" -> "(0.0 / 0.0)";
             case "level_progress" -> "0.00";
             case "level_progress_percent", "prestige" -> "0";
             case "daily_xp_cooldown" -> "0m";

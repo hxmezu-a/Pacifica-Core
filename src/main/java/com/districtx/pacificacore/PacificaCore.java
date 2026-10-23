@@ -17,6 +17,7 @@ import com.districtx.pacificacore.api.SpawnShopService;
 import com.districtx.pacificacore.api.SpawnShopNpcLinkService;
 import com.districtx.pacificacore.api.NpcLinkService;
 import com.districtx.pacificacore.api.BankingService;
+import com.districtx.pacificacore.api.AuthSystemService;
 import com.districtx.pacificacore.api.SpawnShopSlotService;
 import com.districtx.pacificacore.command.SpawnShopCommand;
 import com.districtx.pacificacore.command.SpawnShopAdminCommand;
@@ -24,6 +25,7 @@ import com.districtx.pacificacore.command.AdminCommand;
 import com.districtx.pacificacore.command.CoreAdminCommand;
 import com.districtx.pacificacore.command.CurrencyAdminSubCommand;
 import com.districtx.pacificacore.command.BankingAdminSubCommand;
+import com.districtx.pacificacore.command.AuthAdminCommand;
 import com.districtx.pacificacore.command.BankCommand;
 import com.districtx.pacificacore.bank.BankingGuiManager;
 import com.districtx.pacificacore.shop.SpawnShopManager;
@@ -55,6 +57,7 @@ import com.districtx.pacificacore.level.PlayerLevelListener;
 import com.districtx.pacificacore.level.AdvancementNotificationManager;
 import com.districtx.pacificacore.market.BlackMarketManager;
 import com.districtx.pacificacore.market.BlackMarketService;
+import com.districtx.pacificacore.auth.AuthSystem;
 import com.districtx.pacificacore.vault.PacificaEconomyProvider;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
@@ -89,6 +92,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
     private FileConfiguration currencyConfig;
     private FileConfiguration spawnShopConfig;
     private FileConfiguration blackMarketConfig;
+    private FileConfiguration authConfig;
     private BlackMarketManager blackMarket;
     private PlayerLevelManager playerLevels;
     private LevelRewardManager levelRewards;
@@ -103,13 +107,32 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
     private SpawnShopNpcLinkManager spawnShopNpcLinks;
     private SpawnShopManager spawnShops;
     private BankingServiceImpl banking;
+    private AuthSystem authSystem;
 
     public static PacificaCore getInstance() { return instance; }
     public static PacificaCoreAPI getAPI() { return instance == null ? null : instance.api; }
 
+    private boolean paperDialogApiAvailable() {
+        try {
+            Class<?> dialogClass = Class.forName("io.papermc.paper.dialog.Dialog", false, getClass().getClassLoader());
+            for (java.lang.reflect.Method method : Player.class.getMethods()) {
+                if (method.getName().equals("showDialog") && method.getParameterCount() == 1
+                        && method.getParameterTypes()[0].isAssignableFrom(dialogClass)) return true;
+            }
+        } catch (ClassNotFoundException | LinkageError exception) {
+            return false;
+        }
+        return false;
+    }
+
     @Override
     public void onEnable() {
         instance = this;
+        if (!paperDialogApiAvailable()) {
+            getLogger().severe("Pacific-Core authentication requires Paper's Dialog API (Paper 1.21.7+). This server implementation does not expose the required API; disabling Pacifica-Core to keep authentication fail-closed.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         saveDefaultConfig();
         try {
             prepareLevelConfigurationFiles();
@@ -130,12 +153,15 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
+        authSystem = new AuthSystem(this, database, authConfig);
+        getServer().getPluginManager().registerEvents(authSystem, this);
         storage = new CurrencyStorage(this, database);
         storage.load();
         migrateYamlCurrency();
         playerLevels = new PlayerLevelManager(this, database);
         DiamondCurrencyService diamonds = new DiamondCurrencyServiceImpl(storage);
         EconomyService economy = new EconomyServiceImpl(storage);
+        authSystem.setLinkRewardServices(economy, diamonds);
         spawnShops = new SpawnShopManager(this, new SpawnShopRepository(this, database), playerLevels,
                 new PacificaEconomyProvider(economy));
         SpawnShopGuiManager spawnShopGuis = new SpawnShopGuiManager(this, spawnShops);
@@ -160,7 +186,8 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         advancementNotifications = new AdvancementNotificationManager(this);
         getServer().getPluginManager().registerEvents(advancementNotifications, this);
         api = new PacificaCoreAPIImpl(diamonds, economy, transactions, playerLevels, levelRewards,
-                dailyExperience, prestige, rankBonuses, levelMenus, advancementNotifications, npcLinks, banking);
+                dailyExperience, prestige, rankBonuses, levelMenus, advancementNotifications, npcLinks, banking,
+                authSystem);
         blackMarket = new BlackMarketManager(this, database, economy);
         getServer().getPluginManager().registerEvents(blackMarket, this);
         getServer().getPluginManager().registerEvents(levelMenus, this);
@@ -177,6 +204,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         getServer().getServicesManager().register(TransactionService.class, transactions, this, ServicePriority.Normal);
         getServer().getServicesManager().register(PlayerLevelService.class, playerLevels, this, ServicePriority.Normal);
         getServer().getServicesManager().register(PacificaCoreAPI.class, api, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(AuthSystemService.class, authSystem, this, ServicePriority.Normal);
         getServer().getServicesManager().register(SpawnShopService.class, spawnShops, this, ServicePriority.Normal);
         getServer().getServicesManager().register(NpcLinkService.class, npcLinks, this, ServicePriority.Normal);
         getServer().getServicesManager().register(BankingService.class, banking, this, ServicePriority.Normal);
@@ -186,6 +214,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         getServer().getServicesManager().register(BlackMarketService.class, blackMarket.getService(), this, ServicePriority.Normal);
         getServer().getServicesManager().register(Economy.class, new PacificaEconomyProvider(economy), this,
                 ServicePriority.Highest);
+        getCommand("logout").setExecutor(authSystem);
         getCommand("diamond").setExecutor(this);
         getCommand("bal").setExecutor(this);
         getCommand("bm").setExecutor(blackMarket);
@@ -198,7 +227,8 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         AdminCommand adminCommand = new AdminCommand(List.of(blackMarket, spawnShopAdminCommand,
                 new BankingAdminSubCommand(npcLinks),
                 new CoreAdminCommand(this), new CurrencyAdminSubCommand(this, "diamonds", true),
-                new CurrencyAdminSubCommand(this, "balance", false), levelCommand));
+                new CurrencyAdminSubCommand(this, "balance", false), levelCommand,
+                new AuthAdminCommand(this, authSystem)));
         getCommand("adminpc").setExecutor(adminCommand);
         getCommand("adminpc").setTabCompleter(adminCommand);
         blackMarket.scheduleExpiredOfferCleanup();
@@ -219,6 +249,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
     public void onDisable() {
         getServer().getServicesManager().unregister(this);
         if (lootSystemIntegration != null) lootSystemIntegration.disable();
+        if (authSystem != null) authSystem.shutdown();
         if (npcLinks != null) npcLinks.shutdown();
         if (spawnShopNpcLinks != null) spawnShopNpcLinks.shutdown();
         unregisterPlayerLevelPlaceholderExpansion();
@@ -288,6 +319,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
     public void reloadAdministrativeConfiguration() {
         reloadConfig();
         reloadFeatureConfigurations();
+        if (authSystem != null) authSystem.reloadConfiguration(authConfig);
         messages.reload();
         reloadPlayerLevelConfiguration();
     }
@@ -393,12 +425,31 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         saveResourceIfMissing("level/level.yml", new File(levelFolder, "level.yml"));
         saveResourceIfMissing("level/level-rewards.yml", new File(levelFolder, "level-rewards.yml"));
         File levelFile = new File(levelFolder, "level.yml");
+        migrateLevelProgressionConfiguration(levelFile);
         FileConfiguration levelConfiguration = YamlConfiguration.loadConfiguration(levelFile);
         String levelUsage = levelConfiguration.getString("leveling.messages.commands.usage");
         if (levelUsage != null && levelUsage.contains("/admin ")) {
             levelConfiguration.set("leveling.messages.commands.usage", levelUsage.replace("/admin ", "/adminpc "));
             levelConfiguration.save(levelFile);
         }
+    }
+
+    private void migrateLevelProgressionConfiguration(File levelFile) throws IOException {
+        FileConfiguration configuration = YamlConfiguration.loadConfiguration(levelFile);
+        if (configuration.getInt("leveling.progression.formula-version", 0) >= 2) return;
+        String growthPath = "leveling.progression.growth-rate";
+        if (!configuration.contains(growthPath) || Double.compare(configuration.getDouble(growthPath), 0.25) == 0) {
+            configuration.set(growthPath, 0.05);
+        }
+        configuration.set("leveling.infinite-levels", false);
+        if (!configuration.contains("leveling.progression.regular-maximum-level")) {
+            configuration.set("leveling.progression.regular-maximum-level", 100);
+        }
+        if (!configuration.contains("leveling.progression.maximum-level")) {
+            configuration.set("leveling.progression.maximum-level", 500);
+        }
+        configuration.set("leveling.progression.formula-version", 2);
+        configuration.save(levelFile);
     }
 
     private void prepareFeatureConfigurations() throws IOException {
@@ -422,6 +473,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         FileConfiguration currencyMessages = loadFeatureConfiguration("Currency/messages.yml");
         spawnShopConfig = loadFeatureConfiguration("SpawnShop/config.yml");
         blackMarketConfig = loadFeatureConfiguration("BlackMarket/config.yml");
+        authConfig = loadFeatureConfiguration("AuthSystem/config.yml");
         boolean saveCurrency = false;
         boolean saveCurrencyMessages = false;
         boolean saveSpawnShop = false;
@@ -470,6 +522,7 @@ public final class PacificaCore extends JavaPlugin implements CommandExecutor {
         currencyConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "Currency/config.yml"));
         spawnShopConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "SpawnShop/config.yml"));
         blackMarketConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "BlackMarket/config.yml"));
+        authConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "AuthSystem/config.yml"));
     }
 
     private FileConfiguration loadFeatureConfiguration(String path) throws IOException {

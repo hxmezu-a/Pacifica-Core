@@ -63,13 +63,13 @@ public final class PlayerLevelManager implements PlayerLevelService {
         int minimum = Math.max(1, plugin.getLevelConfig().getInt("leveling.minimum-level", 1));
         double baseExperience = plugin.getLevelConfig().getDouble("leveling.progression.base-xp", 100.0);
         if (!Double.isFinite(baseExperience) || baseExperience <= 0.0) baseExperience = 100.0;
-        double growthRate = plugin.getLevelConfig().getDouble("leveling.progression.growth-rate", 1.25);
-        if (!Double.isFinite(growthRate) || growthRate <= 0.0) growthRate = 0.25;
+        double growthRate = plugin.getLevelConfig().getDouble("leveling.progression.growth-rate", 0.05);
+        if (!Double.isFinite(growthRate) || growthRate <= 0.0) growthRate = 0.05;
         else if (growthRate < 1.0) growthRate += 1.0;
-        if (!plugin.getLevelConfig().getBoolean("leveling.infinite-levels", true)) {
-            plugin.getLogger().warning("Finite level caps are no longer supported; Player Level remains unlimited.");
-        }
-        progression = new ExponentialLevelProgression(minimum, baseExperience, growthRate);
+        minimum = Math.min(500, minimum);
+        int maximum = Math.max(minimum, Math.min(500,
+                plugin.getLevelConfig().getInt("leveling.progression.maximum-level", 500)));
+        progression = new ExponentialLevelProgression(minimum, maximum, baseExperience, growthRate);
     }
 
     /**
@@ -115,6 +115,7 @@ public final class PlayerLevelManager implements PlayerLevelService {
     public BigDecimal getCurrentLevelExperience(UUID playerId) {
         BigDecimal experience = repository.getExactExperience(playerId);
         int level = progression.getLevel(experience);
+        if (level >= progression.getMaximumLevel()) return BigDecimal.ZERO;
         return experience.subtract(progression.getExperienceRequiredForLevelExact(level)).max(BigDecimal.ZERO);
     }
 
@@ -128,7 +129,7 @@ public final class PlayerLevelManager implements PlayerLevelService {
         BigDecimal totalExperience = repository.getExactExperience(playerId);
         int level = progression.getLevel(totalExperience);
         return new PlayerLevelSnapshot(playerId, level, totalExperience,
-                totalExperience.subtract(progression.getExperienceRequiredForLevelExact(level)).max(BigDecimal.ZERO),
+                getCurrentLevelExperience(playerId),
                 progression.getExperienceRequiredForNextLevelExact(level),
                 progression.getExperienceToNextLevelExact(totalExperience),
                 progression.getProgressToNextLevel(totalExperience),
@@ -195,6 +196,8 @@ public final class PlayerLevelManager implements PlayerLevelService {
     public boolean setExperience(UUID playerId, double amount) {
         if (playerId == null || !Double.isFinite(amount) || amount < 0.0) return false;
         return onMainThread(() -> {
+            if (BigDecimal.valueOf(amount).compareTo(
+                    progression.getExperienceRequiredForLevelExact(progression.getMaximumLevel())) > 0) return false;
             PlayerLevelRepository.Change change = repository.setExperience(playerId, amount);
             if (!change.successful()) return false;
             fireLevelChange(playerId, change.previous(), change.current());
@@ -206,7 +209,7 @@ public final class PlayerLevelManager implements PlayerLevelService {
 
     @Override
     public boolean setLevel(UUID playerId, int level) {
-        if (playerId == null || level < getMinimumLevel()) return false;
+        if (playerId == null || level < getMinimumLevel() || level > getMaximumLevel()) return false;
         BigDecimal experience = progression.getExperienceRequiredForLevelExact(level);
         return onMainThread(() -> {
             PlayerLevelRepository.Change change = repository.setExperience(playerId, experience);
@@ -228,6 +231,11 @@ public final class PlayerLevelManager implements PlayerLevelService {
                                                                          ExperienceSource source) {
         BigDecimal before = repository.getExactExperience(playerId);
         int previousLevel = progression.getLevel(before);
+        BigDecimal maximumExperience = progression.getExperienceRequiredForLevelExact(progression.getMaximumLevel());
+        BigDecimal remainingCapacity = maximumExperience.subtract(before);
+        if (remainingCapacity.signum() <= 0) {
+            return result(playerId, before.doubleValue(), 0.0, before.doubleValue(), previousLevel, previousLevel, source);
+        }
         Player player = Bukkit.getPlayer(playerId);
         double amount = proposedAmount;
         RankExperienceBonusService bonusService = rankBonuses;
@@ -244,7 +252,8 @@ public final class PlayerLevelManager implements PlayerLevelService {
         if (!Double.isFinite(amount) || amount <= 0.0) {
             return result(playerId, before.doubleValue(), 0.0, before.doubleValue(), previousLevel, previousLevel, source);
         }
-        PlayerLevelRepository.Change change = repository.addExperience(playerId, BigDecimal.valueOf(amount));
+        BigDecimal acceptedAmount = BigDecimal.valueOf(amount).min(remainingCapacity);
+        PlayerLevelRepository.Change change = repository.addExperience(playerId, acceptedAmount);
         if (!change.successful()) {
             return result(playerId, before.doubleValue(), 0.0, before.doubleValue(), previousLevel, previousLevel, source);
         }
@@ -259,7 +268,7 @@ public final class PlayerLevelManager implements PlayerLevelService {
         refreshMenu(playerId, change.current());
         if (plugin.getLevelConfig().getBoolean("leveling.debug.xp", false)) {
             plugin.getLogger().info("Player Level XP: player=" + playerId + " source=" + source
-                    + " amount=+" + format(amount) + " previous=" + format(change.previous().doubleValue())
+                    + " amount=+" + format(result.getExperienceAdded()) + " previous=" + format(change.previous().doubleValue())
                     + " new=" + format(change.current().doubleValue()) + " level=" + result.getPreviousLevel()
                     + "->" + result.getNewLevel());
         }

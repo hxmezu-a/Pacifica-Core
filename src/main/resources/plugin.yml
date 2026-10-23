@@ -9,7 +9,12 @@ softdepend:
   - Pacifica-II
   - PlaceholderAPI
   - LuckPerms
+  - DiscordSRV
+  - floodgate
+  - Geyser-Spigot
 commands:
+  logout:
+    description: Log out of your authenticated account
   diamond:
     description: Show your Diamond Currency balance
     aliases: [dias, diamonds, dc]
@@ -55,6 +60,7 @@ permissions:
     default: false
     children:
       pacifica.core.admin.reload: true
+      pacifica.core.admin.auth: true
   pacifica.admin.diamonds:
     default: false
     children:
@@ -83,6 +89,12 @@ permissions:
   pacifica.core.command.balance.others:
     default: op
   pacifica.core.admin.reload:
+    default: op
+  pacifica.core.admin.auth:
+    default: op
+  pacifica.auth.bypass:
+    default: op
+  pacifica.auth.iplimit.bypass:
     default: op
   pacifica.core.admin.dgive:
     default: op

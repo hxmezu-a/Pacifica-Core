@@ -1,6 +1,6 @@
 package com.districtx.pacificacore.api;
 
-/** Calculates unlimited levels and progress from permanent Pacifica experience. */
+/** Calculates configured levels and progress from permanent Pacifica experience. */
 public interface LevelProgression {
     /**
      * Calculates a level for an experience amount.
@@ -27,6 +27,7 @@ public interface LevelProgression {
     default double getExperienceIntoCurrentLevel(double totalExperience) {
         if (!Double.isFinite(totalExperience)) return 0.0;
         int level = getLevel(totalExperience);
+        if (level >= getMaximumLevel()) return 0.0;
         return Math.max(0.0, Math.max(0.0, totalExperience) - getExperienceRequiredForLevel(level));
     }
 
@@ -64,6 +65,6 @@ public interface LevelProgression {
     /** @return configured minimum level */
     int getMinimumLevel();
 
-    /** @return configured maximum level, or {@link Integer#MAX_VALUE} for unlimited progression */
+    /** @return configured maximum level */
     int getMaximumLevel();
 }

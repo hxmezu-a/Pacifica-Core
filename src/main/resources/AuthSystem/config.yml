@@ -1,0 +1,75 @@
+authentication:
+  password-enabled: true
+  discord-enabled: false
+  require-discord-on-first-join: false
+  require-discord-on-login: false
+auth-system:
+  join-location:
+    enabled: false
+    world: ""
+    x: 0.0
+    y: 80.0
+    z: 0.0
+    yaw: 0.0
+    pitch: 0.0
+password:
+  minimum-length: 10
+  maximum-length: 128
+discord-linking:
+  enabled: true
+  guild-id: ""
+  verification-category-id: ""
+  max-minecraft-accounts-per-discord: 1
+  verification:
+    code-length: 6
+    expiration-seconds: 300
+    resend-cooldown-seconds: 60
+    max-attempts: 5
+    delivery-method: PRIVATE_CHANNEL
+    create-channel-if-missing: true
+    reuse-existing-channel: true
+    delete-channel-on-logout: false
+  rewards:
+    enabled: true
+    one-time: true
+    commands: []
+    server-balance:
+      enabled: false
+      amount: 0
+    diamond-currency:
+      enabled: false
+      amount: 0
+    messages:
+      discord-linked: "&aYour Minecraft account has been linked successfully!"
+      reward-received: "&aYou received your account-linking reward!"
+discord-daily-rewards:
+  enabled: false
+  guild-id: ""
+  channel-id: ""
+  cooldown-hours: 24
+  rewards: []
+  messages:
+    success: "Your daily Minecraft reward has been claimed!"
+    cooldown: "You have already claimed today's reward. Try again in %time%."
+    pending: "Your reward is queued. Log in to the Minecraft server to receive it."
+    unlinked: "Link your Minecraft account before claiming rewards."
+    error: "Your reward could not be processed. Please try again later."
+ip-limits:
+  enabled: true
+  max-accounts-per-ip: 3
+  # Counts distinct accounts by the IP address used at registration. Existing accounts remain eligible to log in.
+  # HMAC hashes and their local key are retained until the account is deleted; do not delete AuthSystem/ip-hash.key.
+  bypass-permission: "pacifica.auth.iplimit.bypass"
+messages:
+  logout-confirmation: "&aYou have been logged out. Authenticate again to continue."
+  logout-already-logged-out: "&eYou are already logged out."
+  logout-bypass: "&cAuthentication bypass is enabled for your account."
+  discord-linking-disabled: "&cDiscord account linking is currently disabled."
+  discord-limit-reached: "&cThis Discord account has reached its Minecraft account-link limit."
+  discord-link-verified: "&aDiscordSRV confirmed the link. Complete registration to save it."
+  link-code-register-prompt: "Use DiscordSRV's configured account-linking workflow to link this Minecraft account. Return here and check the link status when complete."
+  invalid-link-code: "Incorrect code. Attempts remaining: %attempts%."
+  expired-link-code: "The link code expired. Request a new code to continue."
+  link-code-cooldown: "Wait %seconds% seconds before requesting another code."
+  ip-limit-reached: "&cThe maximum number of Minecraft accounts for this network has been reached."
+  ip-limit-unavailable: "&cYour connection could not be checked for the account limit. Try again later."

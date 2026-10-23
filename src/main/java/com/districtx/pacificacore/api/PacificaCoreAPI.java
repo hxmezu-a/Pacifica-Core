@@ -37,4 +37,7 @@ public interface PacificaCoreAPI {
 
     /** Gets the public banking service, or null when unavailable. */
     default BankingService getBankingService() { return null; }
+
+    /** Gets the authentication service, or null when unavailable. */
+    default AuthSystemService getAuthSystemService() { return null; }
 }

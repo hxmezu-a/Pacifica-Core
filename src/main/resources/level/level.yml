@@ -1,10 +1,13 @@
 leveling:
   enabled: true
-  infinite-levels: true
+  infinite-levels: false
   minimum-level: 1
   progression:
     base-xp: 100.0
-    growth-rate: 0.25
+    growth-rate: 0.05
+    regular-maximum-level: 100
+    maximum-level: 500
+    formula-version: 2
   xp-sources:
     player-kill: 40.0
     pvp-death: 15.0
@@ -169,19 +172,19 @@ gui:
     current-prefix: '&6&lCURRENT LEVEL'
     locked-lore:
       - '&eTotal XP Needed: &8( &7%total_xp_needed% &8)'
-      - '&eRankup XP Needed: &8( &7%xp_progression% &8/ %level_xp_needed% &8)'
+      - '&eRank-Up XP Needed: (&7%xp_progression% &8/ &7%level_xp_needed%&8)'
       - '&7'
       - '&7&lLevel Unlock(s):'
       - '&7'
     unlocked-lore:
       - '&eTotal XP Needed: &8( &7%total_xp_needed% &8)'
-      - '&eRankup XP Needed: &8( &7%xp_progression% &8/ %level_xp_needed% &8)'
+      - '&eRank-Up XP Needed: Complete'
       - '&7'
       - '&7&lLevel Unlock(s):'
       - '&7'
     current-lore:
       - '&eTotal XP Needed: &8( &7%total_xp_needed% &8)'
-      - '&eRankup XP Needed: &8( &7%xp_progression% &8/ %level_xp_needed% &8)'
+      - '&eRank-Up XP Needed: (&7%xp_progression% &8/ &7%level_xp_needed%&8)'
       - '&7'
       - '&7&lLevel Unlock(s):'
       - '&7'
@@ -254,21 +257,46 @@ gui:
         - '&7> &fDeaths: &a%death_bonus%%'
         - '&7> &fLoot: &a%loot_bonus%%'
   prestige:
-    title: '&6&lPrestige'
+    title: '&6&lPrestige &7- &e%page%/%pages%'
     rows: 6
-    info-slot: 22
+    info-slot: 4
     info:
       material: NETHER_STAR
       name: '&e&lPrestige %prestige%'
       lore:
         - '&7Current level: &e%level%'
-        - '&7Prestige mechanics are expandable.'
+        - '&7Milestones from 105 to 500'
+    progression:
+      level-name: '&8[&4&lLevel: %milestone%&8]'
+      current-name: '&8[&4&lLevel: %level%&8]'
+      previous-lore:
+        - '&eTotal XP Needed: &8( &7%total_xp_needed% &8)'
+        - '&eRank-Up XP Needed: Complete'
+      current-lore:
+        - '&eTotal XP Needed: &8( &7%total_xp_needed% &8)'
+        - '&eRank-Up XP Needed: (&7%xp_progression% &8/ &7%level_xp_needed%&8)'
+      upcoming-lore:
+        - '&eTotal XP Needed: &8( &7%total_xp_needed% &8)'
+        - '&eRank-Up XP Needed: (&7%xp_progression% &8/ &7%level_xp_needed%&8)'
+      states:
+        previous:
+          material: NETHER_STAR
+        current:
+          material: WRITABLE_BOOK
+        upcoming:
+          material: END_CRYSTAL
     back:
       slot: 47
       material: REDSTONE
       name: '&c&lBack'
       lore:
         - '&7Return to the Leveling Menu page!'
+    navigation:
+      previous-slot: 48
+      next-slot: 51
+      material: ARROW
+      previous-name: '&e&lPrevious Page'
+      next-name: '&e&lNext Page'
   messages:
     prestige-locked: '&cPrestige unlocks at Level 100.'
 messages:

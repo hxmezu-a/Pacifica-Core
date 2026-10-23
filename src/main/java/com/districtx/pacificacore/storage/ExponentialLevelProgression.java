@@ -9,19 +9,27 @@ import java.math.RoundingMode;
 final class ExponentialLevelProgression implements LevelProgression {
     private static final MathContext CALCULATION_CONTEXT = new MathContext(128, RoundingMode.HALF_EVEN);
     private final int minimumLevel;
-    private final double baseExperience;
-    private final double growthRate;
-    private final double logarithmicGrowth;
-    private final BigDecimal decimalBaseExperience;
-    private final BigDecimal decimalGrowthRate;
+    private final int maximumLevel;
+    private final BigDecimal[] totalExperienceByLevel;
+    private final BigDecimal[] nextLevelCostByLevel;
 
-    ExponentialLevelProgression(int minimumLevel, double baseExperience, double growthRate) {
+    ExponentialLevelProgression(int minimumLevel, int maximumLevel, double baseExperience, double growthRate) {
         this.minimumLevel = minimumLevel;
-        this.baseExperience = baseExperience;
-        this.growthRate = growthRate;
-        this.logarithmicGrowth = Math.log(growthRate);
-        this.decimalBaseExperience = BigDecimal.valueOf(baseExperience);
-        this.decimalGrowthRate = BigDecimal.valueOf(growthRate);
+        this.maximumLevel = maximumLevel;
+        BigDecimal decimalBaseExperience = BigDecimal.valueOf(baseExperience);
+        BigDecimal decimalGrowthRate = BigDecimal.valueOf(growthRate);
+        int levelCount = maximumLevel - minimumLevel + 1;
+        this.totalExperienceByLevel = new BigDecimal[levelCount];
+        this.nextLevelCostByLevel = new BigDecimal[levelCount];
+        totalExperienceByLevel[0] = BigDecimal.ZERO;
+        nextLevelCostByLevel[0] = levelCount == 1 ? BigDecimal.ZERO : decimalBaseExperience;
+        for (int index = 1; index < levelCount; index++) {
+            totalExperienceByLevel[index] = totalExperienceByLevel[index - 1]
+                    .add(nextLevelCostByLevel[index - 1]);
+            nextLevelCostByLevel[index] = index == levelCount - 1 ? BigDecimal.ZERO
+                    : nextLevelCostByLevel[index - 1].multiply(decimalGrowthRate)
+                    .setScale(0, RoundingMode.CEILING);
+        }
     }
 
     @Override
@@ -32,18 +40,14 @@ final class ExponentialLevelProgression implements LevelProgression {
 
     int getLevel(BigDecimal experience) {
         if (experience == null || experience.signum() <= 0) return minimumLevel;
-        double logExperience = logarithm(experience);
-        double logArgument = logExperience + Math.log(growthRate - 1.0) - Math.log(baseExperience);
-        double levelOffset = Math.floor((logArgument > 40.0
-                ? logArgument : Math.log1p(Math.exp(logArgument))) / logarithmicGrowth);
-        if (!Double.isFinite(levelOffset) || levelOffset >= Integer.MAX_VALUE - minimumLevel) {
-            return Integer.MAX_VALUE;
+        int low = 0;
+        int high = totalExperienceByLevel.length;
+        while (low < high) {
+            int middle = (low + high) >>> 1;
+            if (totalExperienceByLevel[middle].compareTo(experience) <= 0) low = middle + 1;
+            else high = middle;
         }
-        int level = minimumLevel + (int) Math.max(0.0, levelOffset);
-        while (level > minimumLevel && getExperienceRequiredForLevelExact(level).compareTo(experience) > 0) level--;
-        while (level < Integer.MAX_VALUE
-                && getExperienceRequiredForLevelExact(level + 1).compareTo(experience) <= 0) level++;
-        return level;
+        return minimumLevel + Math.max(0, low - 1);
     }
 
     @Override
@@ -52,15 +56,8 @@ final class ExponentialLevelProgression implements LevelProgression {
     }
 
     BigDecimal getExperienceRequiredForLevelExact(int level) {
-        long offset = Math.max(0L, (long) level - minimumLevel);
-        if (offset == 0) return BigDecimal.ZERO;
-        BigDecimal numerator = power(offset).subtract(BigDecimal.ONE);
-        BigDecimal denominator = decimalGrowthRate.subtract(BigDecimal.ONE);
-        try {
-            return decimalBaseExperience.multiply(numerator).divide(denominator);
-        } catch (ArithmeticException exception) {
-            return decimalBaseExperience.multiply(numerator).divide(denominator, CALCULATION_CONTEXT);
-        }
+        int boundedLevel = Math.max(minimumLevel, Math.min(maximumLevel, level));
+        return totalExperienceByLevel[boundedLevel - minimumLevel];
     }
 
     @Override
@@ -69,8 +66,8 @@ final class ExponentialLevelProgression implements LevelProgression {
     }
 
     BigDecimal getExperienceRequiredForNextLevelExact(int level) {
-        long offset = Math.max(0L, (long) level - minimumLevel);
-        return decimalBaseExperience.multiply(power(offset));
+        int boundedLevel = Math.max(minimumLevel, Math.min(maximumLevel, level));
+        return nextLevelCostByLevel[boundedLevel - minimumLevel];
     }
 
     @Override
@@ -81,7 +78,7 @@ final class ExponentialLevelProgression implements LevelProgression {
 
     BigDecimal getExperienceToNextLevelExact(BigDecimal experience) {
         int level = getLevel(experience);
-        if (level == Integer.MAX_VALUE) return BigDecimal.ZERO;
+        if (level >= maximumLevel) return BigDecimal.ZERO;
         return getExperienceRequiredForLevelExact(level + 1).subtract(experience).max(BigDecimal.ZERO);
     }
 
@@ -94,6 +91,7 @@ final class ExponentialLevelProgression implements LevelProgression {
     double getProgressToNextLevel(BigDecimal experience) {
         BigDecimal currentExperience = experience == null ? BigDecimal.ZERO : experience.max(BigDecimal.ZERO);
         int level = getLevel(currentExperience);
+        if (level >= maximumLevel) return 1.0;
         BigDecimal start = getExperienceRequiredForLevelExact(level);
         BigDecimal requirement = getExperienceRequiredForNextLevelExact(level);
         if (requirement.signum() <= 0) return 0.0;
@@ -104,28 +102,6 @@ final class ExponentialLevelProgression implements LevelProgression {
 
     float getExpBarProgress(BigDecimal experience) { return (float) getProgressToNextLevel(experience); }
 
-    private BigDecimal power(long exponent) {
-        BigDecimal result = BigDecimal.ONE;
-        BigDecimal factor = decimalGrowthRate;
-        long remaining = exponent;
-        while (remaining > 0) {
-            if ((remaining & 1L) != 0) result = result.multiply(factor, CALCULATION_CONTEXT);
-            remaining >>= 1;
-            if (remaining > 0) factor = factor.multiply(factor, CALCULATION_CONTEXT);
-        }
-        return result;
-    }
-
-    private double logarithm(BigDecimal value) {
-        BigDecimal normalized = value.stripTrailingZeros();
-        String digits = normalized.unscaledValue().abs().toString();
-        int leadingLength = Math.min(16, digits.length());
-        double leading = Double.parseDouble(digits.substring(0, leadingLength))
-                / Math.pow(10.0, leadingLength - 1);
-        long exponent = (long) normalized.precision() - normalized.scale() - 1L;
-        return exponent * Math.log(10.0) + Math.log(leading);
-    }
-
     @Override public int getMinimumLevel() { return minimumLevel; }
-    @Override public int getMaximumLevel() { return Integer.MAX_VALUE; }
+    @Override public int getMaximumLevel() { return maximumLevel; }
 }

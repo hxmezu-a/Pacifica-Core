@@ -30,6 +30,7 @@ public final class DatabaseManager implements AutoCloseable {
     private Connection currencyConnection;
     private Connection spawnShopConnection;
     private Connection blackMarketConnection;
+    private Connection authConnection;
 
     public DatabaseManager(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -52,10 +53,12 @@ public final class DatabaseManager implements AutoCloseable {
         currencyConnection = open(new File(dataFolder, "Currency/balance.db"));
         spawnShopConnection = open(new File(dataFolder, "SpawnShop/shop.db"));
         blackMarketConnection = open(new File(dataFolder, "BlackMarket/itemprices.db"));
+        authConnection = open(new File(dataFolder, "AuthSystem/auth.db"));
         createLevelSchema();
         createCurrencySchema();
         createSpawnShopSchema();
         createBlackMarketSchema();
+        createAuthSchema();
 
         importPlayerData(legacyPlayer);
         importItemPriceData(legacyItemPrices);
@@ -81,6 +84,10 @@ public final class DatabaseManager implements AutoCloseable {
 
     public synchronized <T> T itemPrices(SqlOperation<T> operation) throws SQLException {
         return transaction(blackMarketConnection, operation);
+    }
+
+    public synchronized <T> T auth(SqlOperation<T> operation) throws SQLException {
+        return transaction(authConnection, operation);
     }
 
     private Connection open(File file) throws SQLException {
@@ -206,6 +213,56 @@ public final class DatabaseManager implements AutoCloseable {
                         + "ON black_market_offers(status, category, expires_at)");
                 statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_black_market_bids_offer "
                         + "ON black_market_bids(offer_id, created_at)");
+            }
+            return null;
+        });
+    }
+
+    private void createAuthSchema() throws SQLException {
+        auth(connection -> {
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS auth_accounts ("
+                        + "uuid TEXT PRIMARY KEY, method TEXT NOT NULL, password_hash TEXT, "
+                        + "created_at INTEGER NOT NULL)");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS auth_discord_channels ("
+                        + "uuid TEXT PRIMARY KEY, discord_user_id TEXT NOT NULL, guild_id TEXT NOT NULL, "
+                        + "channel_id TEXT NOT NULL, updated_at INTEGER NOT NULL)");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS auth_discord_links ("
+                        + "uuid TEXT PRIMARY KEY, discord_user_id TEXT NOT NULL, linked_at INTEGER NOT NULL, "
+                        + "FOREIGN KEY (uuid) REFERENCES auth_accounts(uuid) ON DELETE CASCADE)");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS auth_discord_link_rewards ("
+                        + "uuid TEXT PRIMARY KEY, status TEXT NOT NULL, queued_at INTEGER NOT NULL)");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS auth_discord_daily_claims ("
+                        + "uuid TEXT PRIMARY KEY, status TEXT NOT NULL, reserved_at INTEGER NOT NULL, "
+                        + "claimed_at INTEGER NOT NULL DEFAULT 0)");
+                statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_auth_discord_links_user "
+                        + "ON auth_discord_links(discord_user_id)");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS auth_ip_accounts ("
+                        + "uuid TEXT PRIMARY KEY, ip_hash TEXT NOT NULL, updated_at INTEGER NOT NULL, "
+                        + "FOREIGN KEY (uuid) REFERENCES auth_accounts(uuid) ON DELETE CASCADE)");
+                statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_auth_ip_accounts_hash "
+                        + "ON auth_ip_accounts(ip_hash)");
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS auth_schema_migrations (migration_id TEXT PRIMARY KEY)");
+                boolean migrateDiscordLinks;
+                try (PreparedStatement migration = connection.prepareStatement(
+                        "SELECT 1 FROM auth_schema_migrations WHERE migration_id = ?")) {
+                    migration.setString(1, "discord-links-from-auth-channels-v1");
+                    try (ResultSet result = migration.executeQuery()) {
+                        migrateDiscordLinks = !result.next();
+                    }
+                }
+                if (migrateDiscordLinks) {
+                    statement.executeUpdate("INSERT OR IGNORE INTO auth_discord_links "
+                            + "(uuid, discord_user_id, linked_at) SELECT channels.uuid, channels.discord_user_id, "
+                            + "channels.updated_at FROM auth_discord_channels channels "
+                            + "JOIN auth_accounts accounts ON accounts.uuid = channels.uuid "
+                            + "WHERE accounts.method = 'DISCORD'");
+                    try (PreparedStatement marker = connection.prepareStatement(
+                            "INSERT INTO auth_schema_migrations (migration_id) VALUES (?)")) {
+                        marker.setString(1, "discord-links-from-auth-channels-v1");
+                        marker.executeUpdate();
+                    }
+                }
             }
             return null;
         });
@@ -428,10 +485,12 @@ public final class DatabaseManager implements AutoCloseable {
         close(currencyConnection);
         close(spawnShopConnection);
         close(blackMarketConnection);
+        close(authConnection);
         levelConnection = null;
         currencyConnection = null;
         spawnShopConnection = null;
         blackMarketConnection = null;
+        authConnection = null;
     }
 
     private void close(Connection connection) {

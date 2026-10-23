@@ -13,6 +13,7 @@ public final class PacificaCoreAPIImpl implements PacificaCoreAPI {
     private final AdvancementNotificationService advancementNotifications;
     private final NpcLinkService npcLinkService;
     private final BankingService bankingService;
+    private final AuthSystemService authSystemService;
 
     public PacificaCoreAPIImpl(DiamondCurrencyService diamonds, EconomyService economy,
                                TransactionService transactions, PlayerLevelService playerLevels,
@@ -50,7 +51,8 @@ public final class PacificaCoreAPIImpl implements PacificaCoreAPI {
                                PrestigeService prestige, RankExperienceBonusService rankBonuses,
                                LevelMenuService levelMenus,
                                AdvancementNotificationService advancementNotifications,
-                               NpcLinkService npcLinkService, BankingService bankingService) {
+                               NpcLinkService npcLinkService, BankingService bankingService,
+                               AuthSystemService authSystemService) {
         this.diamonds = diamonds;
         this.economy = economy;
         this.transactions = transactions;
@@ -63,6 +65,18 @@ public final class PacificaCoreAPIImpl implements PacificaCoreAPI {
         this.advancementNotifications = advancementNotifications;
         this.npcLinkService = npcLinkService;
         this.bankingService = bankingService;
+        this.authSystemService = authSystemService;
+    }
+
+    public PacificaCoreAPIImpl(DiamondCurrencyService diamonds, EconomyService economy,
+                               TransactionService transactions, PlayerLevelService playerLevels,
+                               LevelRewardService levelRewards, DailyExperienceService dailyExperience,
+                               PrestigeService prestige, RankExperienceBonusService rankBonuses,
+                               LevelMenuService levelMenus,
+                               AdvancementNotificationService advancementNotifications,
+                               NpcLinkService npcLinkService, BankingService bankingService) {
+        this(diamonds, economy, transactions, playerLevels, levelRewards, dailyExperience, prestige,
+                rankBonuses, levelMenus, advancementNotifications, npcLinkService, bankingService, null);
     }
 
     @Override
@@ -97,4 +111,5 @@ public final class PacificaCoreAPIImpl implements PacificaCoreAPI {
     @Override public AdvancementNotificationService getAdvancementNotificationService() { return advancementNotifications; }
     @Override public NpcLinkService getNpcLinkService() { return npcLinkService; }
     @Override public BankingService getBankingService() { return bankingService; }
+    @Override public AuthSystemService getAuthSystemService() { return authSystemService; }
 }

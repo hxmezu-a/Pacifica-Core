@@ -87,7 +87,7 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
     @Override
     public void openProgressionMenu(Player player, int page) {
         if (player == null) return;
-        int maximumPage = maximumProgressionPage(player);
+        int maximumPage = maximumProgressionPage();
         int safePage = Math.max(1, Math.min(maximumPage, page));
         Inventory inventory = createInventory(player, "PROGRESSION", safePage,
                 plugin.getLevelConfig().getString("gui.progression.title", "&6&lLevel Progression &7- &e%page%/%pages%")
@@ -143,6 +143,10 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
         if (player == null || !(player.getOpenInventory().getTopInventory().getHolder() instanceof LevelMenuHolder holder)) return;
         if (holder.getMenu().equals("MAIN")) openMainMenu(player);
         else if (holder.getMenu().equals("PROGRESSION")) openProgressionMenu(player, holder.getPage());
+        else if (holder.getMenu().equals("PRESTIGE")) {
+            if (prestige.isUnlocked(player.getUniqueId())) prestigeMenu.open(player, holder.getPage());
+            else openMainMenu(player);
+        }
     }
 
     @Override
@@ -151,17 +155,19 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
         for (int index = 0; index < LEVEL_SLOTS.length; index++) {
             if (LEVEL_SLOTS[index] == slot) {
                 long level = ((long) page - 1) * LEVEL_SLOTS.length + index + 1;
-                return level <= Integer.MAX_VALUE ? OptionalInt.of((int) level) : OptionalInt.empty();
+                return level <= regularMaximumLevel() ? OptionalInt.of((int) level) : OptionalInt.empty();
             }
         }
         return OptionalInt.empty();
     }
 
-    private int maximumProgressionPage(Player player) {
-        int configuredPages = Math.max(1, plugin.getLevelConfig().getInt("gui.progression.pages", 5));
-        long currentLevel = Math.max(1, levels.getLevel(player.getUniqueId()));
-        long currentLevelPage = (currentLevel - 1) / LEVEL_SLOTS.length + 1;
-        return (int) Math.max(configuredPages, Math.min(Integer.MAX_VALUE, currentLevelPage));
+    private int maximumProgressionPage() {
+        return Math.max(1, (regularMaximumLevel() + LEVEL_SLOTS.length - 1) / LEVEL_SLOTS.length);
+    }
+
+    private int regularMaximumLevel() {
+        return Math.min(100, Math.min(levels.getMaximumLevel(),
+                plugin.getLevelConfig().getInt("leveling.progression.regular-maximum-level", 100)));
     }
 
     @EventHandler
@@ -199,7 +205,7 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
         else if (slot == configuredSlot("gui.progression.navigation.previous-slot", 48, 54) && page > 1) {
             openProgressionMenu(player, page - 1);
         } else if (slot == configuredSlot("gui.progression.navigation.next-slot", 51, 54)
-                && page < maximumProgressionPage(player)) {
+                && page < maximumProgressionPage()) {
             openProgressionMenu(player, page + 1);
         }
     }
@@ -271,7 +277,7 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
         values.put("level", LevelDisplayFormatter.format(plugin, level));
         values.put("player_level", LevelDisplayFormatter.format(plugin, level));
         values.put("level_progression", format(levels.getProgressToNextLevel(playerId) * 100.0));
-        values.put("total_xp_needed", format(levels.getExperienceRequiredForLevel(level + 1)));
+        values.put("total_xp_needed", format(levels.getProgression().getTotalExperienceRequiredForLevel(level)));
         values.put("xp_progression", format(levels.getProgression().getExperienceIntoCurrentLevel(
                 levels.getExperience(playerId))));
         values.put("level_xp_needed", format(levels.getProgression().getExperienceRequiredForNextLevel(level)));
@@ -330,8 +336,10 @@ public final class LevelMenuManager implements LevelMenuService, Listener {
     }
 
     private ItemStack createItem(String materialName, String name, List<String> lore, Map<String, String> values) {
-        Material material = Material.matchMaterial(materialName == null ? "" : materialName);
-        if (material == null) material = Material.matchMaterial("STONE");
+        Material material = com.cryptomorin.xseries.XMaterial.matchXMaterial(materialName == null ? "" : materialName)
+                .map(com.cryptomorin.xseries.XMaterial::parseMaterial)
+                .orElseGet(() -> com.cryptomorin.xseries.XMaterial.matchXMaterial("STONE")
+                        .map(com.cryptomorin.xseries.XMaterial::parseMaterial).orElseThrow());
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return item;
