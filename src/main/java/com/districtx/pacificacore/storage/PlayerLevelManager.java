@@ -1,0 +1,457 @@
+package com.districtx.pacificacore.storage;
+
+import com.districtx.pacificacore.PacificaCore;
+import com.districtx.pacificacore.api.ExperienceGainResult;
+import com.districtx.pacificacore.api.ExperienceSource;
+import com.districtx.pacificacore.api.LevelProgression;
+import com.districtx.pacificacore.api.PlayerLevelSnapshot;
+import com.districtx.pacificacore.api.PlayerLevelService;
+import com.districtx.pacificacore.api.LevelRewardService;
+import com.districtx.pacificacore.api.RankExperienceBonusService;
+import com.districtx.pacificacore.api.LevelMenuService;
+import com.districtx.pacificacore.api.event.PlayerExperienceGainEvent;
+import com.districtx.pacificacore.api.event.PlayerExperienceGrantedEvent;
+import com.districtx.pacificacore.api.event.PlayerLevelUpEvent;
+import com.districtx.pacificacore.api.event.PlayerLevelChangeEvent;
+import com.districtx.pacificacore.api.event.PrestigeUnlockEvent;
+import com.districtx.pacificacore.level.ExperienceFormatter;
+import com.districtx.pacificacore.level.LevelDisplayFormatter;
+import net.md_5.bungee.api.ChatMessageType;
+import net.md_5.bungee.api.chat.TextComponent;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.entity.Player;
+
+import java.util.UUID;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.math.BigDecimal;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+
+/** Core-owned implementation of the public Player Level service. */
+public final class PlayerLevelManager implements PlayerLevelService {
+    private final PacificaCore plugin;
+    private final PlayerLevelRepository repository;
+    private final PendingLevelRewardRepository pendingRewards;
+    private volatile ExponentialLevelProgression progression;
+    private volatile LevelRewardService rewardService;
+    private volatile RankExperienceBonusService rankBonuses;
+    private volatile LevelMenuService levelMenus;
+    private final Map<UUID, List<ExperienceGainResult>> pendingExperienceNotifications = new HashMap<>();
+    private final Set<UUID> deferredNotificationPlayers = new HashSet<>();
+
+    /**
+     * Creates the persistent Player Level service.
+     *
+     * @param plugin owning Pacifica-Core plugin
+     * @param database existing Pacifica-Core database manager
+     */
+    public PlayerLevelManager(PacificaCore plugin, DatabaseManager database) {
+        this.plugin = plugin;
+        this.repository = new PlayerLevelRepository(plugin, database);
+        this.pendingRewards = new PendingLevelRewardRepository(plugin, database);
+        reload();
+    }
+
+    /** Reloads level range and progression settings without changing stored experience. */
+    public void reload() {
+        int minimum = Math.max(1, plugin.getLevelConfig().getInt("leveling.minimum-level", 1));
+        double baseExperience = plugin.getLevelConfig().getDouble("leveling.progression.base-xp", 100.0);
+        if (!Double.isFinite(baseExperience) || baseExperience <= 0.0) baseExperience = 100.0;
+        double growthRate = plugin.getLevelConfig().getDouble("leveling.progression.growth-rate", 0.05);
+        if (!Double.isFinite(growthRate) || growthRate <= 0.0) growthRate = 0.05;
+        else if (growthRate < 1.0) growthRate += 1.0;
+        minimum = Math.min(500, minimum);
+        int maximum = Math.max(minimum, Math.min(500,
+                plugin.getLevelConfig().getInt("leveling.progression.maximum-level", 500)));
+        progression = new ExponentialLevelProgression(minimum, maximum, baseExperience, growthRate);
+    }
+
+    /**
+     * Creates the player's default record if one does not exist.
+     *
+     * @param playerId player UUID
+     * @return whether initialization completed successfully
+     */
+    public boolean initializePlayer(UUID playerId) {
+        return repository.initialize(playerId);
+    }
+
+    public void setRewardService(LevelRewardService rewardService) {
+        this.rewardService = rewardService;
+    }
+
+    public void setRankExperienceBonusService(RankExperienceBonusService rankBonuses) {
+        this.rankBonuses = rankBonuses;
+    }
+
+    public void setLevelMenuService(LevelMenuService levelMenus) {
+        this.levelMenus = levelMenus;
+    }
+
+    @Override public double getExperience(UUID playerId) { return repository.getExactExperience(playerId).doubleValue(); }
+
+    @Override
+    public BigDecimal getTotalExperience(UUID playerId) {
+        return repository.getExactExperience(playerId);
+    }
+
+    @Override
+    public int getLevel(UUID playerId) {
+        return progression.getLevel(repository.getExactExperience(playerId));
+    }
+
+    @Override
+    public double getExperienceToNextLevel(UUID playerId) {
+        return progression.getExperienceToNextLevelExact(repository.getExactExperience(playerId)).doubleValue();
+    }
+
+    @Override
+    public BigDecimal getCurrentLevelExperience(UUID playerId) {
+        BigDecimal experience = repository.getExactExperience(playerId);
+        int level = progression.getLevel(experience);
+        if (level >= progression.getMaximumLevel()) return BigDecimal.ZERO;
+        return experience.subtract(progression.getExperienceRequiredForLevelExact(level)).max(BigDecimal.ZERO);
+    }
+
+    @Override
+    public BigDecimal getExperienceRequiredForNextLevel(UUID playerId) {
+        return progression.getExperienceRequiredForNextLevelExact(getLevel(playerId));
+    }
+
+    @Override
+    public PlayerLevelSnapshot getProgressionSnapshot(UUID playerId) {
+        BigDecimal totalExperience = repository.getExactExperience(playerId);
+        int level = progression.getLevel(totalExperience);
+        return new PlayerLevelSnapshot(playerId, level, totalExperience,
+                getCurrentLevelExperience(playerId),
+                progression.getExperienceRequiredForNextLevelExact(level),
+                progression.getExperienceToNextLevelExact(totalExperience),
+                progression.getProgressToNextLevel(totalExperience),
+                playerId != null && level < progression.getMaximumLevel());
+    }
+
+    @Override
+    public double getExperienceRequiredForLevel(int level) {
+        return progression.getExperienceRequiredForLevel(level);
+    }
+
+    @Override
+    public double getProgressToNextLevel(UUID playerId) {
+        return progression.getProgressToNextLevel(repository.getExactExperience(playerId));
+    }
+
+    @Override public int getMinimumLevel() { return progression.getMinimumLevel(); }
+    @Override public int getMaximumLevel() { return progression.getMaximumLevel(); }
+    @Override public LevelProgression getProgression() { return progression; }
+
+    @Override
+    public boolean addExperience(UUID playerId, double amount) {
+        return addExperience(playerId, amount, ExperienceSource.API).getExperienceAdded() > 0.0;
+    }
+
+    @Override
+    public boolean addExperience(Player player, double amount) {
+        return player != null && addExperience(player.getUniqueId(), amount, ExperienceSource.API)
+                .getExperienceAdded() > 0.0;
+    }
+
+    @Override
+    public ExperienceGainResult addExperience(Player player, double amount, ExperienceSource source) {
+        return player == null ? emptyResult(null, source) : addExperience(player.getUniqueId(), amount, source);
+    }
+
+    @Override
+    public ExperienceGainResult addExperience(UUID playerId, double amount, ExperienceSource source) {
+        ExperienceSource effectiveSource = source == null ? ExperienceSource.OTHER : source;
+        if (playerId == null) return emptyResult(null, effectiveSource);
+        if (!Double.isFinite(amount) || amount <= 0.0) {
+            BigDecimal previous = repository.getExactExperience(playerId);
+            int level = progression.getLevel(previous);
+            return result(playerId, previous.doubleValue(), 0.0, previous.doubleValue(), level, level, effectiveSource);
+        }
+        return onMainThread(() -> addExperienceOnMainThread(playerId, amount, effectiveSource),
+                emptyResult(playerId, effectiveSource));
+    }
+
+    @Override
+    public boolean removeExperience(UUID playerId, double amount) {
+        if (playerId == null || !Double.isFinite(amount) || amount < 0.0) return false;
+        return onMainThread(() -> {
+            PlayerLevelRepository.Change change = repository.removeExperience(playerId, amount);
+            if (!change.successful()) return false;
+            fireLevelChange(playerId, change.previous(), change.current());
+            fireLevelUp(playerId, change.previous(), change.current());
+            refreshMenu(playerId, change.current());
+            return true;
+        }, false);
+    }
+
+    @Override
+    public boolean setExperience(UUID playerId, double amount) {
+        if (playerId == null || !Double.isFinite(amount) || amount < 0.0) return false;
+        return onMainThread(() -> {
+            if (BigDecimal.valueOf(amount).compareTo(
+                    progression.getExperienceRequiredForLevelExact(progression.getMaximumLevel())) > 0) return false;
+            PlayerLevelRepository.Change change = repository.setExperience(playerId, amount);
+            if (!change.successful()) return false;
+            fireLevelChange(playerId, change.previous(), change.current());
+            fireLevelUp(playerId, change.previous(), change.current());
+            refreshMenu(playerId, change.current());
+            return true;
+        }, false);
+    }
+
+    @Override
+    public boolean setLevel(UUID playerId, int level) {
+        if (playerId == null || level < getMinimumLevel() || level > getMaximumLevel()) return false;
+        BigDecimal experience = progression.getExperienceRequiredForLevelExact(level);
+        return onMainThread(() -> {
+            PlayerLevelRepository.Change change = repository.setExperience(playerId, experience);
+            if (!change.successful()) return false;
+            fireLevelChange(playerId, change.previous(), change.current());
+            fireLevelUp(playerId, change.previous(), change.current());
+            refreshMenu(playerId, change.current());
+            return true;
+        }, false);
+    }
+
+    @Override
+    public boolean hasExperience(UUID playerId, double amount) {
+        return playerId != null && Double.isFinite(amount) && amount >= 0.0
+                && getExperience(playerId) >= amount;
+    }
+
+    private synchronized ExperienceGainResult addExperienceOnMainThread(UUID playerId, double proposedAmount,
+                                                                         ExperienceSource source) {
+        BigDecimal before = repository.getExactExperience(playerId);
+        int previousLevel = progression.getLevel(before);
+        BigDecimal maximumExperience = progression.getExperienceRequiredForLevelExact(progression.getMaximumLevel());
+        BigDecimal remainingCapacity = maximumExperience.subtract(before);
+        if (remainingCapacity.signum() <= 0) {
+            return result(playerId, before.doubleValue(), 0.0, before.doubleValue(), previousLevel, previousLevel, source);
+        }
+        Player player = Bukkit.getPlayer(playerId);
+        double amount = proposedAmount;
+        RankExperienceBonusService bonusService = rankBonuses;
+        if (bonusService != null) amount = bonusService.applyBonus(playerId, source, amount);
+        if (player != null) {
+            PlayerExperienceGainEvent event = new PlayerExperienceGainEvent(
+                    player, amount, source, before.doubleValue(), previousLevel, progression);
+            Bukkit.getPluginManager().callEvent(event);
+            if (event.isCancelled()) {
+                return result(playerId, before.doubleValue(), 0.0, before.doubleValue(), previousLevel, previousLevel, source);
+            }
+            amount = event.getAmount();
+        }
+        if (!Double.isFinite(amount) || amount <= 0.0) {
+            return result(playerId, before.doubleValue(), 0.0, before.doubleValue(), previousLevel, previousLevel, source);
+        }
+        BigDecimal acceptedAmount = BigDecimal.valueOf(amount).min(remainingCapacity);
+        PlayerLevelRepository.Change change = repository.addExperience(playerId, acceptedAmount);
+        if (!change.successful()) {
+            return result(playerId, before.doubleValue(), 0.0, before.doubleValue(), previousLevel, previousLevel, source);
+        }
+        int newLevel = progression.getLevel(change.current());
+        ExperienceGainResult result = result(playerId, change.previous().doubleValue(),
+                change.current().subtract(change.previous()).doubleValue(), change.current().doubleValue(),
+                progression.getLevel(change.previous()), newLevel, source);
+        Bukkit.getPluginManager().callEvent(new PlayerExperienceGrantedEvent(result));
+        fireLevelChange(playerId, change.previous(), change.current());
+        fireLevelUp(playerId, change.previous(), change.current());
+        notifyExperience(player, result);
+        refreshMenu(playerId, change.current());
+        if (plugin.getLevelConfig().getBoolean("leveling.debug.xp", false)) {
+            plugin.getLogger().info("Player Level XP: player=" + playerId + " source=" + source
+                    + " amount=+" + format(result.getExperienceAdded()) + " previous=" + format(change.previous().doubleValue())
+                    + " new=" + format(change.current().doubleValue()) + " level=" + result.getPreviousLevel()
+                    + "->" + result.getNewLevel());
+        }
+        return result;
+    }
+
+    private void fireLevelUp(UUID playerId, BigDecimal previousExperience, BigDecimal newExperience) {
+        int previousLevel = progression.getLevel(previousExperience);
+        int newLevel = progression.getLevel(newExperience);
+        if (newLevel <= previousLevel) return;
+        boolean persisted = pendingRewards.record(playerId, previousLevel, newLevel);
+        Player player = Bukkit.getPlayer(playerId);
+        if (player == null) return;
+        Bukkit.getPluginManager().callEvent(new PlayerLevelUpEvent(player, previousLevel, newLevel));
+        int prestigeUnlock = plugin.getLevelConfig().getInt("prestige.unlock-level", 100);
+        if (previousLevel < prestigeUnlock && newLevel >= prestigeUnlock) {
+            Bukkit.getPluginManager().callEvent(new PrestigeUnlockEvent(player, prestigeUnlock));
+        }
+        if (persisted) processPendingLevelRewards(player);
+        else grantLevelRewardsRange(player, previousLevel, newLevel);
+        if (!plugin.getLevelConfig().getBoolean("leveling.messages.level-up.enabled", true)) return;
+        String message = plugin.getLevelConfig().getString("leveling.messages.level-up.message", "");
+        if (message.isEmpty()) return;
+        message = message.replace("%old_level%", LevelDisplayFormatter.format(plugin, previousLevel))
+                .replace("%new_level%", LevelDisplayFormatter.format(plugin, newLevel))
+                .replace("%level%", LevelDisplayFormatter.format(plugin, newLevel))
+                .replace("%exp%", format(newExperience.doubleValue()))
+                .replace("%exp_to_next_level%", format(
+                        progression.getExperienceToNextLevelExact(newExperience).doubleValue()));
+        player.sendMessage(color(message));
+    }
+
+    private void fireLevelChange(UUID playerId, BigDecimal previousExperience, BigDecimal newExperience) {
+        int previousLevel = progression.getLevel(previousExperience);
+        int newLevel = progression.getLevel(newExperience);
+        if (previousLevel == newLevel) return;
+        Player player = Bukkit.getPlayer(playerId);
+        if (player != null) {
+            Bukkit.getPluginManager().callEvent(new PlayerLevelChangeEvent(player, previousLevel, newLevel));
+        }
+    }
+
+    public void processPendingLevelRewards(Player player) {
+        if (player == null) return;
+        PendingLevelRewardRepository.Range range = pendingRewards.get(player.getUniqueId());
+        if (range == null) return;
+        LevelRewardService rewards = rewardService;
+        if (rewards == null || !plugin.getLevelRewardsConfig().getBoolean("rewards.enabled", true)) return;
+        grantLevelRewardsRange(player, range.previousLevel(), range.newLevel());
+        pendingRewards.clear(player.getUniqueId());
+    }
+
+    private void grantLevelRewardsRange(Player player, int previousLevel, int lastLevel) {
+        LevelRewardService rewards = rewardService;
+        if (rewards == null || !plugin.getLevelRewardsConfig().getBoolean("rewards.enabled", true)) return;
+        int startLevel = plugin.getLevelRewardsConfig().getBoolean("rewards.process-every-level-crossed", true)
+                ? previousLevel + 1 : lastLevel;
+        for (int level = startLevel; level <= lastLevel; level++) {
+            rewards.grantLevelRewards(player, level);
+            if (level == lastLevel) break;
+        }
+    }
+
+    private void notifyExperience(Player player, ExperienceGainResult result) {
+        if (player == null || !plugin.getLevelConfig().getBoolean("leveling.messages.experience.enabled", true)) return;
+        if (player.isDead() || deferredNotificationPlayers.contains(player.getUniqueId())) {
+            pendingExperienceNotifications.computeIfAbsent(player.getUniqueId(), ignored -> new ArrayList<>()).add(result);
+            return;
+        }
+        double amount = result.getExperienceAdded();
+        double newExperience = result.getNewExperience();
+        int level = result.getNewLevel();
+        ExperienceSource source = result.getSource();
+        String message = plugin.getLevelConfig().getString("leveling.messages.experience-gain",
+                "&e&l+ &a&l%xp%");
+        message = message.replace("%xp%", ExperienceFormatter.formatReward(amount))
+                .replace("%level%", LevelDisplayFormatter.format(plugin, level))
+                .replace("%player%", player.getName())
+                .replace("%source%", source.name())
+                .replace("%exp%", format(newExperience))
+                .replace("%exp_to_next_level%", format(progression.getExperienceToNextLevel(newExperience)));
+        message = ExperienceFormatter.applyPlaceholders(player, message);
+        String colored = color(message);
+        if (plugin.getLevelConfig().getBoolean("leveling.messages.experience.action-bar", false)) {
+            player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(colored));
+        }
+        if (plugin.getLevelConfig().getBoolean("leveling.messages.experience.sound.enabled", false)) {
+            String sound = plugin.getLevelConfig().getString("leveling.messages.experience.sound.sound",
+                    "ENTITY_PLAYER_LEVELUP");
+            float volume = (float) plugin.getLevelConfig().getDouble("leveling.messages.experience.sound.volume", 1.0);
+            float pitch = (float) plugin.getLevelConfig().getDouble("leveling.messages.experience.sound.pitch", 2.0);
+            player.playSound(player.getLocation(), sound, volume, pitch);
+        }
+    }
+
+    private ExperienceGainResult emptyResult(UUID playerId, ExperienceSource source) {
+        return result(playerId, 0.0, 0.0, 0.0, getMinimumLevel(), getMinimumLevel(),
+                source == null ? ExperienceSource.OTHER : source);
+    }
+
+    private ExperienceGainResult result(UUID playerId, double previous, double added, double current,
+                                        int previousLevel, int newLevel, ExperienceSource source) {
+        return new ExperienceGainResult(playerId, previous, added, current, previousLevel, newLevel, source);
+    }
+
+    private String format(double value) {
+        return ExperienceFormatter.formatXp(value);
+    }
+
+    private String color(String message) {
+        return org.bukkit.ChatColor.translateAlternateColorCodes('&', message);
+    }
+
+    private void refreshMenu(UUID playerId, BigDecimal experience) {
+        LevelMenuService menus = levelMenus;
+        Player player = Bukkit.getPlayer(playerId);
+        if (player != null) updateExperienceDisplay(player, experience);
+        if (menus != null && player != null) menus.refresh(player);
+    }
+
+    public void refreshExperienceDisplay(Player player) {
+        if (player == null) return;
+        updateExperienceDisplay(player, repository.getExactExperience(player.getUniqueId()));
+    }
+
+    public void refreshPlayer(Player player) {
+        if (player == null) return;
+        deferredNotificationPlayers.remove(player.getUniqueId());
+        BigDecimal experience = repository.getExactExperience(player.getUniqueId());
+        int level = progression.getLevel(experience);
+        float progress = progression.getExpBarProgress(experience);
+        updateExperienceDisplay(player, experience);
+        if (plugin.getLevelConfig().getBoolean("debug.level-display", false)) {
+            double currentLevelXp = experience.subtract(progression.getExperienceRequiredForLevelExact(level))
+                    .doubleValue();
+            double requiredXp = progression.getExperienceRequiredForNextLevelExact(level).doubleValue();
+            plugin.getLogger().info("Refreshing level display for " + player.getName());
+            plugin.getLogger().info("Level: " + level);
+            plugin.getLogger().info("Current XP: " + ExperienceFormatter.formatXp(currentLevelXp));
+            plugin.getLogger().info("Required XP: " + ExperienceFormatter.formatXp(requiredXp));
+            plugin.getLogger().info("XP Progress: " + progress);
+            plugin.getLogger().info("XP bar restored");
+        }
+        LevelMenuService menus = levelMenus;
+        if (menus != null) menus.refresh(player);
+        List<ExperienceGainResult> pending = pendingExperienceNotifications.remove(player.getUniqueId());
+        if (pending != null) {
+            for (ExperienceGainResult result : pending) notifyExperience(player, result);
+        }
+    }
+
+    private void updateExperienceDisplay(Player player, BigDecimal experience) {
+        player.setLevel(progression.getLevel(experience));
+        player.setExp(progression.getExpBarProgress(experience));
+    }
+
+    public void cleanupPendingNotifications(UUID playerId) {
+        if (playerId == null) return;
+        pendingExperienceNotifications.remove(playerId);
+        deferredNotificationPlayers.remove(playerId);
+    }
+
+    public void deferNotificationsUntilRespawn(UUID playerId) {
+        if (playerId != null) deferredNotificationPlayers.add(playerId);
+    }
+
+    private <T> T onMainThread(Callable<T> operation, T fallback) {
+        if (Bukkit.isPrimaryThread()) {
+            try {
+                return operation.call();
+            } catch (Exception exception) {
+                plugin.getLogger().severe("Could not update Pacifica Player Level data: " + exception.getMessage());
+                return fallback;
+            }
+        }
+        try {
+            return Bukkit.getScheduler().callSyncMethod(plugin, operation).get();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return fallback;
+        } catch (ExecutionException | RuntimeException exception) {
+            plugin.getLogger().severe("Could not schedule Pacifica Player Level update: " + exception.getMessage());
+            return fallback;
+        }
+    }
+}

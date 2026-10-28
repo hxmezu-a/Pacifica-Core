@@ -1,0 +1,2 @@
+Your project is using dependencies that aren't supported, please create a ticket and show serbob a screenshot of this:
+- github.scarsz.discordsrv.dependencies.jda.api.events.interaction.command

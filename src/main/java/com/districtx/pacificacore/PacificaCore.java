@@ -1,0 +1,626 @@
+package com.districtx.pacificacore;
+
+import com.districtx.pacificacore.api.DiamondCurrencyService;
+import com.districtx.pacificacore.api.AdvancementNotificationService;
+import com.districtx.pacificacore.api.EconomyService;
+import com.districtx.pacificacore.api.PacificaCoreAPI;
+import com.districtx.pacificacore.api.PacificaCoreAPIImpl;
+import com.districtx.pacificacore.api.PlayerLevelService;
+import com.districtx.pacificacore.api.LevelRewardService;
+import com.districtx.pacificacore.api.DailyExperienceService;
+import com.districtx.pacificacore.api.PrestigeService;
+import com.districtx.pacificacore.api.RankExperienceBonusService;
+import com.districtx.pacificacore.api.LevelMenuService;
+import com.districtx.pacificacore.api.TransactionService;
+import com.districtx.pacificacore.api.ShopAccessService;
+import com.districtx.pacificacore.api.SpawnShopService;
+import com.districtx.pacificacore.api.SpawnShopNpcLinkService;
+import com.districtx.pacificacore.api.NpcLinkService;
+import com.districtx.pacificacore.api.BankingService;
+import com.districtx.pacificacore.api.AuthSystemService;
+import com.districtx.pacificacore.api.SpawnShopSlotService;
+import com.districtx.pacificacore.command.SpawnShopCommand;
+import com.districtx.pacificacore.command.SpawnShopAdminCommand;
+import com.districtx.pacificacore.command.AdminCommand;
+import com.districtx.pacificacore.command.CoreAdminCommand;
+import com.districtx.pacificacore.command.CurrencyAdminSubCommand;
+import com.districtx.pacificacore.command.BankingAdminSubCommand;
+import com.districtx.pacificacore.command.AuthAdminCommand;
+import com.districtx.pacificacore.command.BankCommand;
+import com.districtx.pacificacore.bank.BankingGuiManager;
+import com.districtx.pacificacore.shop.SpawnShopManager;
+import com.districtx.pacificacore.shop.SpawnShopGuiManager;
+import com.districtx.pacificacore.command.PlayerLevelCommand;
+import com.districtx.pacificacore.economy.DiamondCurrencyServiceImpl;
+import com.districtx.pacificacore.economy.EconomyServiceImpl;
+import com.districtx.pacificacore.economy.BankingServiceImpl;
+import com.districtx.pacificacore.economy.MoneyFormatter;
+import com.districtx.pacificacore.economy.TransactionServiceImpl;
+import com.districtx.pacificacore.storage.CurrencyStorage;
+import com.districtx.pacificacore.storage.BankingRepository;
+import com.districtx.pacificacore.storage.DatabaseManager;
+import com.districtx.pacificacore.storage.PlayerLevelManager;
+import com.districtx.pacificacore.storage.DailyExperienceRepository;
+import com.districtx.pacificacore.storage.PrestigeRepository;
+import com.districtx.pacificacore.storage.NpcLinkManager;
+import com.districtx.pacificacore.storage.SpawnShopNpcLinkManager;
+import com.districtx.pacificacore.storage.SpawnShopRepository;
+import com.districtx.pacificacore.level.reward.LevelRewardManager;
+import com.districtx.pacificacore.level.DailyExperienceManager;
+import com.districtx.pacificacore.level.PrestigeManager;
+import com.districtx.pacificacore.level.gui.LevelMenuManager;
+import com.districtx.pacificacore.integration.LuckPermsRankProvider;
+import com.districtx.pacificacore.integration.RankExperienceBonusManager;
+import com.districtx.pacificacore.integration.LootSystemIntegration;
+import com.districtx.pacificacore.integration.PacificaCombatTagIntegration;
+import com.districtx.pacificacore.level.PlayerLevelListener;
+import com.districtx.pacificacore.level.AdvancementNotificationManager;
+import com.districtx.pacificacore.market.BlackMarketManager;
+import com.districtx.pacificacore.market.BlackMarketService;
+import com.districtx.pacificacore.auth.AuthSystem;
+import com.districtx.pacificacore.vault.PacificaEconomyProvider;
+import net.milkbowl.vault.economy.Economy;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.ServicePriority;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import java.math.BigDecimal;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.UUID;
+import java.util.List;
+
+public final class PacificaCore extends JavaPlugin implements CommandExecutor {
+    private static PacificaCore instance;
+    private PacificaCoreAPI api;
+    private DatabaseManager database;
+    private CurrencyStorage storage;
+    private FileConfigurationBridge messages;
+    private FileConfiguration levelConfig;
+    private FileConfiguration levelRewardsConfig;
+    private FileConfiguration currencyConfig;
+    private FileConfiguration spawnShopConfig;
+    private FileConfiguration blackMarketConfig;
+    private FileConfiguration authConfig;
+    private BlackMarketManager blackMarket;
+    private PlayerLevelManager playerLevels;
+    private LevelRewardManager levelRewards;
+    private DailyExperienceManager dailyExperience;
+    private PrestigeManager prestige;
+    private RankExperienceBonusManager rankBonuses;
+    private LevelMenuManager levelMenus;
+    private AdvancementNotificationManager advancementNotifications;
+    private LootSystemIntegration lootSystemIntegration;
+    private Object playerLevelPlaceholderExpansion;
+    private NpcLinkManager npcLinks;
+    private SpawnShopNpcLinkManager spawnShopNpcLinks;
+    private SpawnShopManager spawnShops;
+    private BankingServiceImpl banking;
+    private AuthSystem authSystem;
+
+    public static PacificaCore getInstance() { return instance; }
+    public static PacificaCoreAPI getAPI() { return instance == null ? null : instance.api; }
+
+    private boolean paperDialogApiAvailable() {
+        try {
+            Class<?> dialogClass = Class.forName("io.papermc.paper.dialog.Dialog", false, getClass().getClassLoader());
+            for (java.lang.reflect.Method method : Player.class.getMethods()) {
+                if (method.getName().equals("showDialog") && method.getParameterCount() == 1
+                        && method.getParameterTypes()[0].isAssignableFrom(dialogClass)) return true;
+            }
+        } catch (ClassNotFoundException | LinkageError exception) {
+            return false;
+        }
+        return false;
+    }
+
+    @Override
+    public void onEnable() {
+        instance = this;
+        if (!paperDialogApiAvailable()) {
+            getLogger().severe("Pacific-Core authentication requires Paper's Dialog API (Paper 1.21.7+). This server implementation does not expose the required API; disabling Pacifica-Core to keep authentication fail-closed.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        saveDefaultConfig();
+        try {
+            prepareLevelConfigurationFiles();
+            prepareFeatureConfigurations();
+            prepareLegacyCurrencyFiles();
+        } catch (IOException exception) {
+            getLogger().severe("Could not prepare Pacifica-Core feature files: " + exception.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        reloadLevelConfigurations();
+        messages = new FileConfigurationBridge(this);
+        database = new DatabaseManager(this);
+        try {
+            database.initialize();
+        } catch (java.sql.SQLException exception) {
+            getLogger().severe("Could not initialize Pacifica-Core databases: " + exception.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        authSystem = new AuthSystem(this, database, authConfig);
+        getServer().getPluginManager().registerEvents(authSystem, this);
+        storage = new CurrencyStorage(this, database);
+        storage.load();
+        migrateYamlCurrency();
+        playerLevels = new PlayerLevelManager(this, database);
+        DiamondCurrencyService diamonds = new DiamondCurrencyServiceImpl(storage);
+        EconomyService economy = new EconomyServiceImpl(storage);
+        authSystem.setLinkRewardServices(economy, diamonds);
+        spawnShops = new SpawnShopManager(this, new SpawnShopRepository(this, database), playerLevels,
+                new PacificaEconomyProvider(economy));
+        SpawnShopGuiManager spawnShopGuis = new SpawnShopGuiManager(this, spawnShops);
+        spawnShops.setGuiManager(spawnShopGuis);
+        getServer().getPluginManager().registerEvents(spawnShopGuis, this);
+        npcLinks = new NpcLinkManager(this, database);
+        spawnShopNpcLinks = new SpawnShopNpcLinkManager(this, database, npcLinks);
+        BankingGuiManager bankingMenus = new BankingGuiManager(this, economy);
+        banking = new BankingServiceImpl(this, storage, new BankingRepository(this, database), bankingMenus);
+        bankingMenus.setBankingService(banking);
+        getServer().getPluginManager().registerEvents(bankingMenus, this);
+        TransactionService transactions = new TransactionServiceImpl(storage);
+        levelRewards = new LevelRewardManager(this, database, playerLevels, economy, diamonds);
+        playerLevels.setRewardService(levelRewards);
+        rankBonuses = new RankExperienceBonusManager(this, new LuckPermsRankProvider(this));
+        playerLevels.setRankExperienceBonusService(rankBonuses);
+        dailyExperience = new DailyExperienceManager(this, playerLevels, economy,
+                new DailyExperienceRepository(this, database));
+        prestige = new PrestigeManager(this, playerLevels, new PrestigeRepository(this, database));
+        levelMenus = new LevelMenuManager(this, playerLevels, levelRewards, dailyExperience, prestige, rankBonuses);
+        playerLevels.setLevelMenuService(levelMenus);
+        advancementNotifications = new AdvancementNotificationManager(this);
+        getServer().getPluginManager().registerEvents(advancementNotifications, this);
+        api = new PacificaCoreAPIImpl(diamonds, economy, transactions, playerLevels, levelRewards,
+                dailyExperience, prestige, rankBonuses, levelMenus, advancementNotifications, npcLinks, banking,
+                authSystem);
+        blackMarket = new BlackMarketManager(this, database, economy);
+        getServer().getPluginManager().registerEvents(blackMarket, this);
+        getServer().getPluginManager().registerEvents(levelMenus, this);
+        getServer().getPluginManager().registerEvents(levelMenus.getPrestigeMenu(), this);
+        getServer().getServicesManager().register(LevelRewardService.class, levelRewards, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(DailyExperienceService.class, dailyExperience, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(PrestigeService.class, prestige, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(RankExperienceBonusService.class, rankBonuses, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(LevelMenuService.class, levelMenus, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(AdvancementNotificationService.class, advancementNotifications,
+                this, ServicePriority.Normal);
+        getServer().getServicesManager().register(DiamondCurrencyService.class, diamonds, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(EconomyService.class, economy, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(TransactionService.class, transactions, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(PlayerLevelService.class, playerLevels, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(PacificaCoreAPI.class, api, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(AuthSystemService.class, authSystem, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(SpawnShopService.class, spawnShops, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(NpcLinkService.class, npcLinks, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(BankingService.class, banking, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(SpawnShopNpcLinkService.class, spawnShopNpcLinks, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(SpawnShopSlotService.class, spawnShops, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(ShopAccessService.class, spawnShops, this, ServicePriority.Normal);
+        getServer().getServicesManager().register(BlackMarketService.class, blackMarket.getService(), this, ServicePriority.Normal);
+        getServer().getServicesManager().register(Economy.class, new PacificaEconomyProvider(economy), this,
+                ServicePriority.Highest);
+        getCommand("logout").setExecutor(authSystem);
+        getCommand("diamond").setExecutor(this);
+        getCommand("bal").setExecutor(this);
+        getCommand("bm").setExecutor(blackMarket);
+        getCommand("spawnshop").setExecutor(new SpawnShopCommand(this, spawnShopGuis));
+        getCommand("bank").setExecutor(new BankCommand(banking));
+        SpawnShopAdminCommand spawnShopAdminCommand = new SpawnShopAdminCommand(this, spawnShops,
+                npcLinks, spawnShopNpcLinks);
+        PlayerLevelCommand levelCommand = new PlayerLevelCommand(this);
+        getCommand("level").setExecutor(levelCommand);
+        AdminCommand adminCommand = new AdminCommand(List.of(blackMarket, spawnShopAdminCommand,
+                new BankingAdminSubCommand(npcLinks),
+                new CoreAdminCommand(this), new CurrencyAdminSubCommand(this, "diamonds", true),
+                new CurrencyAdminSubCommand(this, "balance", false), levelCommand,
+                new AuthAdminCommand(this, authSystem)));
+        getCommand("adminpc").setExecutor(adminCommand);
+        getCommand("adminpc").setTabCompleter(adminCommand);
+        blackMarket.scheduleExpiredOfferCleanup();
+        PacificaCombatTagIntegration combatTagIntegration = new PacificaCombatTagIntegration(this);
+        getServer().getPluginManager().registerEvents(new PlayerLevelListener(this, playerLevels, combatTagIntegration), this);
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            playerLevels.initializePlayer(online.getUniqueId());
+            playerLevels.refreshPlayer(online);
+            playerLevels.processPendingLevelRewards(online);
+        }
+        lootSystemIntegration = new LootSystemIntegration(this);
+        lootSystemIntegration.refresh();
+        refreshPlayerLevelPlaceholderExpansion();
+        getLogger().info("Pacifica-Core is ready with Diamond Currency and Vault economy services.");
+    }
+
+    @Override
+    public void onDisable() {
+        getServer().getServicesManager().unregister(this);
+        if (lootSystemIntegration != null) lootSystemIntegration.disable();
+        if (authSystem != null) authSystem.shutdown();
+        if (npcLinks != null) npcLinks.shutdown();
+        if (spawnShopNpcLinks != null) spawnShopNpcLinks.shutdown();
+        unregisterPlayerLevelPlaceholderExpansion();
+        if (blackMarket != null) blackMarket.close();
+        if (banking != null) banking.close();
+        if (database != null) database.close();
+        instance = null;
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("diamond")) {
+            if (!(sender instanceof Player player)) return tell(sender, "players-only");
+            if (!sender.hasPermission("pacifica.core.command.diamond")) return tell(sender, "no-permission");
+            return send(sender, "balance-diamond", "amount", format(api.getDiamondCurrencyService().getBalance(player.getUniqueId())));
+        }
+        if (command.getName().equalsIgnoreCase("bal")) return balance(sender, args);
+        return false;
+    }
+
+    private boolean balance(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("pacifica.core.command.balance")) return tell(sender, "no-permission");
+        OfflinePlayer target = sender instanceof Player player ? player : null;
+        if (args.length == 1) {
+            if (!sender.hasPermission("pacifica.core.command.balance.others")) return tell(sender, "no-permission");
+            target = findPlayer(args[0]);
+            if (target == null) return tell(sender, "player-not-found");
+        }
+        if (target == null) return tell(sender, "players-only");
+        String key = args.length == 1 ? "balance-other" : "balance-money";
+        return send(sender, key, "player", target.getName() == null ? args[0] : target.getName(),
+                "amount", format(api.getEconomyService().getBalance(target.getUniqueId())));
+    }
+
+    private OfflinePlayer findPlayer(String name) {
+        Player online = Bukkit.getPlayerExact(name);
+        if (online != null) return online;
+        OfflinePlayer offline = Bukkit.getOfflinePlayer(name);
+        return offline.hasPlayedBefore() ? offline : null;
+    }
+
+    private boolean tell(CommandSender sender, String key) { return send(sender, key); }
+
+    private boolean send(CommandSender sender, String key, String... values) {
+        String message = messages.get(key, key);
+        for (int i = 0; i + 1 < values.length; i += 2) message = message.replace("%" + values[i] + "%", values[i + 1]);
+        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', message));
+        return true;
+    }
+
+    private String format(BigDecimal amount) {
+        return MoneyFormatter.format(amount);
+    }
+
+    public OfflinePlayer findOfflinePlayer(String name) {
+        return findPlayer(name);
+    }
+
+    public boolean sendAdminMessage(CommandSender sender, String key, String... values) {
+        return send(sender, key, values);
+    }
+
+    public String formatAmount(BigDecimal amount) {
+        return format(amount);
+    }
+
+    public void reloadAdministrativeConfiguration() {
+        reloadConfig();
+        reloadFeatureConfigurations();
+        if (authSystem != null) authSystem.reloadConfiguration(authConfig);
+        messages.reload();
+        reloadPlayerLevelConfiguration();
+    }
+
+    private void migrateYamlCurrency() {
+        File currencyFolder = new File(getDataFolder(), "Currency");
+        migrateYamlFile(new File(currencyFolder, "balance.yml"), new File(currencyFolder, ".balance-yaml-migrated"));
+        migrateYamlFile(new File(currencyFolder, "balances.yml"), new File(currencyFolder, ".balances-yaml-migrated"));
+        File legacy = new File(getDataFolder().getParentFile(), "Pacifica-Currency/balances.yml");
+        migrateYamlFile(legacy, new File(currencyFolder, ".legacy-diamond-migrated"));
+    }
+
+    private void migrateYamlFile(File file, File marker) {
+        if (marker.isFile() || !file.isFile()) return;
+        FileConfiguration yaml = YamlConfiguration.loadConfiguration(file);
+        boolean successful = migrateSection(yaml.getConfigurationSection("diamonds"), true);
+        successful &= migrateSection(yaml.getConfigurationSection("balances"), false);
+        if (!successful) {
+            getLogger().warning("Database migration from " + file.getName() + " was not completed; it will be retried.");
+            return;
+        }
+        try {
+            if (!getDataFolder().exists() && !getDataFolder().mkdirs()) throw new IOException("directory unavailable");
+            if (!marker.createNewFile() && !marker.isFile()) throw new IOException("marker unavailable");
+            getLogger().info("Migrated currency data from " + file.getName() + ".");
+        } catch (IOException exception) {
+            getLogger().warning("Could not mark " + file.getName() + " as migrated: " + exception.getMessage());
+        }
+    }
+
+    private boolean migrateSection(org.bukkit.configuration.ConfigurationSection section, boolean diamonds) {
+        if (section == null) return true;
+        boolean successful = true;
+        for (String key : section.getKeys(false)) {
+            try {
+                UUID uuid = UUID.fromString(key);
+                BigDecimal amount = new BigDecimal(section.getString(key, "0"));
+                if (amount.signum() < 0 || amount.scale() > 8) throw new IllegalArgumentException("invalid amount");
+                boolean imported = diamonds ? storage.importDiamondIfAbsent(uuid, amount)
+                        : storage.importBalanceIfAbsent(uuid, amount);
+                if (!imported) successful = false;
+            } catch (IllegalArgumentException exception) {
+                getLogger().warning("Ignoring invalid " + (diamonds ? "Diamond Currency" : "balance")
+                        + " entry: " + key);
+            }
+        }
+        return successful;
+    }
+
+    private void reloadPlayerLevelConfiguration() {
+        reloadLevelConfigurations();
+        if (playerLevels != null) playerLevels.reload();
+        if (advancementNotifications != null) advancementNotifications.reload();
+        if (lootSystemIntegration != null) lootSystemIntegration.refresh();
+        refreshPlayerLevelPlaceholderExpansion();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (playerLevels != null) playerLevels.processPendingLevelRewards(player);
+            if (levelMenus != null) levelMenus.refresh(player);
+        }
+    }
+
+    public FileConfiguration getLevelConfig() {
+        return levelConfig;
+    }
+
+    public FileConfiguration getLevelRewardsConfig() {
+        return levelRewardsConfig;
+    }
+
+    public FileConfiguration getCurrencyConfig() {
+        return currencyConfig;
+    }
+
+    public FileConfiguration getSpawnShopConfig() {
+        return spawnShopConfig;
+    }
+
+    public FileConfiguration getBlackMarketConfig() {
+        return blackMarketConfig;
+    }
+
+    public String getMessage(String key) {
+        return messages.get(key, key);
+    }
+
+    public String getMessage(String key, String fallback) {
+        return messages.get(key, fallback);
+    }
+
+    private void reloadLevelConfigurations() {
+        File levelFolder = new File(getDataFolder(), "level");
+        File levelFile = new File(levelFolder, "level.yml");
+        File rewardsFile = new File(levelFolder, "level-rewards.yml");
+        levelConfig = YamlConfiguration.loadConfiguration(levelFile);
+        levelRewardsConfig = YamlConfiguration.loadConfiguration(rewardsFile);
+    }
+
+    private void prepareLevelConfigurationFiles() throws IOException {
+        File levelFolder = new File(getDataFolder(), "level");
+        if (!levelFolder.exists() && !levelFolder.mkdirs()) throw new IOException("Could not create level directory.");
+        relocateLegacyYaml(new File(getDataFolder(), "level.yml"), new File(levelFolder, "level.yml"));
+        relocateLegacyYaml(new File(getDataFolder(), "level-rewards.yml"), new File(levelFolder, "level-rewards.yml"));
+        saveResourceIfMissing("level/level.yml", new File(levelFolder, "level.yml"));
+        saveResourceIfMissing("level/level-rewards.yml", new File(levelFolder, "level-rewards.yml"));
+        File levelFile = new File(levelFolder, "level.yml");
+        migrateLevelProgressionConfiguration(levelFile);
+        FileConfiguration levelConfiguration = YamlConfiguration.loadConfiguration(levelFile);
+        String levelUsage = levelConfiguration.getString("leveling.messages.commands.usage");
+        if (levelUsage != null && levelUsage.contains("/admin ")) {
+            levelConfiguration.set("leveling.messages.commands.usage", levelUsage.replace("/admin ", "/adminpc "));
+            levelConfiguration.save(levelFile);
+        }
+    }
+
+    private void migrateLevelProgressionConfiguration(File levelFile) throws IOException {
+        FileConfiguration configuration = YamlConfiguration.loadConfiguration(levelFile);
+        if (configuration.getInt("leveling.progression.formula-version", 0) >= 2) return;
+        String growthPath = "leveling.progression.growth-rate";
+        if (!configuration.contains(growthPath) || Double.compare(configuration.getDouble(growthPath), 0.25) == 0) {
+            configuration.set(growthPath, 0.05);
+        }
+        configuration.set("leveling.infinite-levels", false);
+        if (!configuration.contains("leveling.progression.regular-maximum-level")) {
+            configuration.set("leveling.progression.regular-maximum-level", 100);
+        }
+        if (!configuration.contains("leveling.progression.maximum-level")) {
+            configuration.set("leveling.progression.maximum-level", 500);
+        }
+        configuration.set("leveling.progression.formula-version", 2);
+        configuration.save(levelFile);
+    }
+
+    private void prepareFeatureConfigurations() throws IOException {
+        FileConfiguration root = getConfig();
+        File currencyFile = new File(new File(getDataFolder(), "Currency"), "config.yml");
+        File currencyMessagesFile = new File(new File(getDataFolder(), "Currency"), "messages.yml");
+        File spawnShopFile = new File(new File(getDataFolder(), "SpawnShop"), "config.yml");
+        File blackMarketFile = new File(new File(getDataFolder(), "BlackMarket"), "config.yml");
+        boolean currencyExisted = currencyFile.isFile();
+        boolean currencyMessagesExisted = currencyMessagesFile.isFile();
+        boolean spawnShopExisted = spawnShopFile.isFile();
+        boolean blackMarketExisted = blackMarketFile.isFile();
+        boolean hasLegacySettings = root.contains("storage-file") || root.contains("messages")
+                || root.contains("spawn-shop") || root.contains("black-market");
+        if (hasLegacySettings) {
+            backupFile(new File(getDataFolder(), "config.yml"),
+                    new File(getDataFolder(), "Currency/.migration-backups/config.yml.bak"));
+        }
+
+        currencyConfig = loadFeatureConfiguration("Currency/config.yml");
+        FileConfiguration currencyMessages = loadFeatureConfiguration("Currency/messages.yml");
+        spawnShopConfig = loadFeatureConfiguration("SpawnShop/config.yml");
+        blackMarketConfig = loadFeatureConfiguration("BlackMarket/config.yml");
+        authConfig = loadFeatureConfiguration("AuthSystem/config.yml");
+        boolean saveCurrency = false;
+        boolean saveCurrencyMessages = false;
+        boolean saveSpawnShop = false;
+        boolean saveBlackMarket = false;
+
+        if (root.contains("storage-file")) {
+            if (!currencyExisted || !currencyConfig.contains("storage-file")) {
+                currencyConfig.set("storage-file", root.get("storage-file"));
+                saveCurrency = true;
+            }
+            root.set("storage-file", null);
+        }
+        if (root.getConfigurationSection("messages") != null) {
+            mergeConfiguration(root.getConfigurationSection("messages"), currencyMessages, "messages", !currencyMessagesExisted);
+            root.set("messages", null);
+            saveCurrencyMessages = true;
+        }
+        if (root.getConfigurationSection("spawn-shop") != null) {
+            mergeConfiguration(root.getConfigurationSection("spawn-shop"), spawnShopConfig, "spawn-shop", !spawnShopExisted);
+            root.set("spawn-shop", null);
+            saveSpawnShop = true;
+        }
+        if (root.getConfigurationSection("black-market") != null) {
+            mergeConfiguration(root.getConfigurationSection("black-market"), blackMarketConfig, "black-market", !blackMarketExisted);
+            root.set("black-market", null);
+            saveBlackMarket = true;
+        }
+
+        String usage = currencyMessages.getString("messages.usage");
+        if (usage != null && usage.contains("/admin ")) {
+            currencyMessages.set("messages.usage", usage.replace("/admin ", "/adminpc "));
+            saveCurrencyMessages = true;
+        }
+        saveConfigurationIfNeeded(currencyConfig, currencyFile, saveCurrency);
+        saveConfigurationIfNeeded(currencyMessages, currencyMessagesFile, saveCurrencyMessages);
+        saveConfigurationIfNeeded(spawnShopConfig, spawnShopFile, saveSpawnShop);
+        saveConfigurationIfNeeded(blackMarketConfig, blackMarketFile, saveBlackMarket);
+        if (hasLegacySettings) {
+            root.save(new File(getDataFolder(), "config.yml"));
+            reloadConfig();
+        }
+        reloadFeatureConfigurations();
+    }
+
+    private void reloadFeatureConfigurations() {
+        currencyConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "Currency/config.yml"));
+        spawnShopConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "SpawnShop/config.yml"));
+        blackMarketConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "BlackMarket/config.yml"));
+        authConfig = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "AuthSystem/config.yml"));
+    }
+
+    private FileConfiguration loadFeatureConfiguration(String path) throws IOException {
+        File file = new File(getDataFolder(), path);
+        File parent = file.getParentFile();
+        if (!parent.exists() && !parent.mkdirs()) throw new IOException("Could not create feature directory " + parent.getName() + ".");
+        if (!file.exists()) saveResource(path.replace(File.separatorChar, '/'), false);
+        return YamlConfiguration.loadConfiguration(file);
+    }
+
+    private void saveResourceIfMissing(String resource, File file) {
+        if (!file.exists()) saveResource(resource, false);
+    }
+
+    private void saveConfigurationIfNeeded(FileConfiguration configuration, File file, boolean save) throws IOException {
+        if (save) configuration.save(file);
+    }
+
+    private void mergeConfiguration(ConfigurationSection source, FileConfiguration destination, String prefix,
+                                    boolean override) {
+        for (String key : source.getKeys(false)) {
+            String path = prefix.isEmpty() ? key : prefix + "." + key;
+            ConfigurationSection child = source.getConfigurationSection(key);
+            if (child != null) mergeConfiguration(child, destination, path, override);
+            else if (override || !destination.contains(path)) destination.set(path, source.get(key));
+        }
+    }
+
+    private void relocateLegacyYaml(File source, File destination) throws IOException {
+        if (!source.isFile()) return;
+        backupFile(source, new File(destination.getParentFile(), ".migration-backups/" + destination.getName() + ".bak"));
+        if (!destination.exists()) {
+            Files.move(source.toPath(), destination.toPath());
+            return;
+        }
+        FileConfiguration oldConfiguration = YamlConfiguration.loadConfiguration(source);
+        FileConfiguration newConfiguration = YamlConfiguration.loadConfiguration(destination);
+        mergeConfiguration(oldConfiguration, newConfiguration, "", false);
+        newConfiguration.save(destination);
+        Files.delete(source.toPath());
+    }
+
+    private void backupFile(File source, File backup) throws IOException {
+        if (!source.isFile() || backup.exists()) return;
+        File parent = backup.getParentFile();
+        if (!parent.exists() && !parent.mkdirs()) throw new IOException("Could not create backup directory.");
+        Files.copy(source.toPath(), backup.toPath(), StandardCopyOption.COPY_ATTRIBUTES);
+    }
+
+    private void prepareLegacyCurrencyFiles() throws IOException {
+        File currencyFolder = new File(getDataFolder(), "Currency");
+        for (String name : List.of("balance.yml", "balances.yml")) {
+            relocateLegacyYaml(new File(getDataFolder(), name), new File(currencyFolder, name));
+        }
+        for (String name : List.of(".balance-yaml-migrated", ".balances-yaml-migrated", ".legacy-diamond-migrated")) {
+            File oldMarker = new File(getDataFolder(), name);
+            if (!oldMarker.isFile()) continue;
+            File newMarker = new File(currencyFolder, name);
+            if (!newMarker.exists()) Files.move(oldMarker.toPath(), newMarker.toPath());
+            else Files.delete(oldMarker.toPath());
+        }
+    }
+
+    private void refreshPlayerLevelPlaceholderExpansion() {
+        unregisterPlayerLevelPlaceholderExpansion();
+        if (!getLevelConfig().getBoolean("leveling.integrations.placeholder-api", true)) return;
+        org.bukkit.plugin.Plugin placeholderApi = getServer().getPluginManager().getPlugin("PlaceholderAPI");
+        if (placeholderApi == null || !placeholderApi.isEnabled()) return;
+        try {
+            Class<?> expansionClass = Class.forName(
+                    "com.districtx.pacificacore.placeholder.PlayerLevelPlaceholderExpansion",
+                    true, getClass().getClassLoader());
+            Object expansion = expansionClass.getConstructor(PacificaCore.class).newInstance(this);
+            Object registered = expansionClass.getMethod("register").invoke(expansion);
+            if (Boolean.TRUE.equals(registered)) playerLevelPlaceholderExpansion = expansion;
+        } catch (ReflectiveOperationException | LinkageError exception) {
+            getLogger().warning("Could not register Pacifica Player Level placeholders: " + exception.getMessage());
+        }
+    }
+
+    private void unregisterPlayerLevelPlaceholderExpansion() {
+        if (playerLevelPlaceholderExpansion == null) return;
+        try {
+            playerLevelPlaceholderExpansion.getClass().getMethod("unregister")
+                    .invoke(playerLevelPlaceholderExpansion);
+        } catch (ReflectiveOperationException | LinkageError exception) {
+            getLogger().warning("Could not unregister Pacifica Player Level placeholders: " + exception.getMessage());
+        } finally {
+            playerLevelPlaceholderExpansion = null;
+        }
+    }
+
+    private static final class FileConfigurationBridge {
+        private final PacificaCore plugin;
+        private org.bukkit.configuration.file.FileConfiguration config;
+
+        private FileConfigurationBridge(PacificaCore plugin) { this.plugin = plugin; reload(); }
+        private void reload() { config = YamlConfiguration.loadConfiguration(new File(plugin.getDataFolder(), "Currency/messages.yml")); }
+        private String get(String key, String fallback) { return config.getString("messages." + key, fallback); }
+    }
+}

@@ -1,0 +1,43 @@
+package com.districtx.pacificacore.api;
+
+public interface PacificaCoreAPI {
+    DiamondCurrencyService getDiamondCurrencyService();
+
+    EconomyService getEconomyService();
+
+    TransactionService getTransactionService();
+
+    /**
+     * Gets the service for permanent Pacifica Player Level progression.
+     *
+     * @return the Player Level service
+     */
+    PlayerLevelService getPlayerLevelService();
+
+    /** Gets the service for configurable level and milestone rewards. */
+    LevelRewardService getLevelRewardService();
+
+    /** Gets the persistent Daily XP purchase service. */
+    DailyExperienceService getDailyExperienceService();
+
+    /** Gets the independent Prestige service. */
+    PrestigeService getPrestigeService();
+
+    /** Gets optional LuckPerms-backed XP bonus calculations. */
+    RankExperienceBonusService getRankExperienceBonusService();
+
+    /** Gets the public Level and Prestige menu controller. */
+    LevelMenuService getLevelMenuService();
+
+    /** Gets the configured repeatable XP advancement notification service. */
+    default AdvancementNotificationService getAdvancementNotificationService() { return null; }
+
+    /** Gets the identifier-only service for linking features to external NPCs. */
+    default NpcLinkService getNpcLinkService() { return null; }
+
+    /** Gets the public banking service, or null when unavailable. */
+    default BankingService getBankingService() { return null; }
+
+    /** Gets the authentication service, or null when unavailable. */
+    default AuthSystemService getAuthSystemService() { return null; }
+}

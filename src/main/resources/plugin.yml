@@ -1,0 +1,136 @@
+name: Pacifica-Core
+version: ${version}
+main: com.districtx.pacificacore.PacificaCore
+api-version: '1.21'
+author: DistrictX Developers Officials
+depend:
+  - Vault
+softdepend:
+  - Pacifica-II
+  - PlaceholderAPI
+  - LuckPerms
+  - DiscordSRV
+  - floodgate
+  - Geyser-Spigot
+commands:
+  logout:
+    description: Log out of your authenticated account
+  diamond:
+    description: Show your Diamond Currency balance
+    aliases: [dias, diamonds, dc]
+    permission: pacifica.core.command.diamond
+  bal:
+    description: Show a server balance
+    aliases: [balance]
+    permission: pacifica.core.command.balance
+  adminpc:
+    description: Manage Pacifica-Core administrative features
+  bm:
+    description: Open the Black Market
+    aliases: [blackmarket]
+    permission: pacifica.core.command.blackmarket
+  level:
+    description: Open the Pacifica Leveling menu
+    aliases: [levels, playerlevel]
+    permission: pacifica.level.command
+  spawnshop:
+    description: Open the Spawn Shop
+  bank:
+    description: Open your Pacifica bank account
+permissions:
+  pacifica.admin:
+    default: op
+    children:
+      pacifica.admin.bm: true
+      pacifica.admin.sshop: true
+      pacifica.admin.core: true
+      pacifica.admin.diamonds: true
+      pacifica.admin.balance: true
+      pacifica.admin.level: true
+      pacifica.admin.bank: true
+  pacifica.admin.bm:
+    default: false
+    children:
+      blackmarket.admin.category: true
+  pacifica.admin.sshop:
+    default: false
+    children:
+      pacifica.spawnshop.admin: true
+  pacifica.admin.core:
+    default: false
+    children:
+      pacifica.core.admin.reload: true
+      pacifica.core.admin.auth: true
+  pacifica.admin.diamonds:
+    default: false
+    children:
+      pacifica.core.admin.reload: true
+      pacifica.core.admin.dgive: true
+      pacifica.core.admin.get: true
+      pacifica.core.admin.set: true
+      pacifica.core.admin.reset: true
+  pacifica.admin.balance:
+    default: false
+    children:
+      pacifica.core.admin.bgive: true
+      pacifica.core.admin.get: true
+      pacifica.core.admin.set: true
+      pacifica.core.admin.reset: true
+  pacifica.admin.level:
+    default: false
+    children:
+      pacifica.level.admin: true
+  pacifica.admin.bank:
+    default: op
+  pacifica.core.command.diamond:
+    default: true
+  pacifica.core.command.balance:
+    default: true
+  pacifica.core.command.balance.others:
+    default: op
+  pacifica.core.admin.reload:
+    default: op
+  pacifica.core.admin.auth:
+    default: op
+  pacifica.auth.bypass:
+    default: op
+  pacifica.auth.iplimit.bypass:
+    default: op
+  pacifica.core.admin.dgive:
+    default: op
+  pacifica.core.admin.bgive:
+    default: op
+  pacifica.core.admin.reset:
+    default: op
+  pacifica.core.admin.get:
+    default: op
+  pacifica.core.admin.set:
+    default: op
+  pacifica.core.command.blackmarket:
+    default: true
+  blackmarket.admin.category:
+    default: op
+  pacifica.level.command:
+    default: true
+  pacifica.level.admin:
+    default: op
+    children:
+      pacifica.level.set: true
+      pacifica.level.addxp: true
+      pacifica.level.setxp: true
+      pacifica.level.removexp: true
+      pacifica.level.info: true
+  pacifica.level.set:
+    default: op
+  pacifica.level.addxp:
+    default: op
+  pacifica.level.setxp:
+    default: op
+  pacifica.level.removexp:
+    default: op
+  pacifica.level.info:
+    default: op
+  pacifica.spawnshop:
+    default: op
+  pacifica.spawnshop.admin:
+    default: op
